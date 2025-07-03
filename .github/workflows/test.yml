@@ -1,0 +1,45 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/lingo-db/hipy-dev
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          apt update && apt install -y ccache
+          python3 -m venv ${{ github.workspace }}/venv
+          echo "${{ github.workspace }}/venv/bin" >> $GITHUB_PATH
+          source ${{ github.workspace }}/venv/bin/activate
+          pip install pytest numpy pandas pyarrow networkx scipy pybind11 jinja2 scikit-learn
+          python -c "import pyarrow; pyarrow.create_library_symlinks()"
+
+      - name: Build C++ backend
+        shell: bash
+        run: |
+          source ${{ github.workspace }}/venv/bin/activate
+          cd cppbackend
+          touch standalone.cpp
+          export HIPY_STANDALONE_SOURCE=$(pwd)
+          cmake -B /generator -DPYTHON_EXECUTABLE=${{ github.workspace }}/venv/bin/python .
+          export HIPY_STANDALONE_BUILD=/generator
+
+      - name: Run tests
+        shell: bash
+        run: |
+          export HIPY_STANDALONE_SOURCE=$(pwd)/cppbackend
+          export HIPY_STANDALONE_BUILD=/generator
+          source ${{ github.workspace }}/venv/bin/activate
+          export PYTHONPATH=".:$PYTHONPATH"
+          pytest test
