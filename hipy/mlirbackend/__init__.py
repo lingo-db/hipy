@@ -10,6 +10,7 @@ import lingodbbridge.mlir.extras.types as mlirtypes
 import lingodbbridge
 import hipy.ir as ir
 import lingodb
+
 curr_context = None
 curr_module = None
 
@@ -33,11 +34,17 @@ def to_mlir_type(t):
             return db.StringType.get(curr_context)
         case ir.IntType():
             return mlirtypes.i64()
+        case ir.RecordType(members=members):
+            return mlirtypes.TupleType.get_tuple([to_mlir_type(t) for m,t in members], curr_context)
+        case ir.FunctionRefType(arg_types=arg_types, res_type=res_type, closure_type=closure_type):
+            if closure_type is None:
+                return mlirtypes.FunctionType.get([to_mlir_type(t) for t in arg_types],[to_mlir_type(res_type)], curr_context)
+            else:
+                assert False
         case _:
             assert False
     print(t)
     assert False
-
 
 
 def str_attr(s):
@@ -62,6 +69,24 @@ def get_tmp_member_name():
 
 helper_fn_cntr = 0
 
+def call(callee, args, mapping):
+    match callee.type:
+        case ir.FunctionRefType(arg_types=arg_types, res_type=res_type, closure_type=closure_type):
+            if closure_type is not None:
+                assert False
+            else:
+                if isinstance(res_type, ir.VoidType):
+                    assert False
+                else:
+                    match callee.producer:
+                        case ir.FunctionRef(name=func_name):
+                            callOp = func.CallOp([to_mlir_type(res_type)], func_name, args)
+                            return callOp.results[0]
+                        case _:
+                            callOp = func.CallIndirectOp([to_mlir_type(res_type)], mapping[callee],args)
+                            return callOp.results[0]
+    assert False
+
 
 def to_mlir_stmt(stmt, mapping):
     global helper_fn_cntr
@@ -81,19 +106,19 @@ def to_mlir_stmt(stmt, mapping):
                     mapping[r] = db.ConstantOp(to_mlir_type(r.type), str_attr(v)).result
                 case ir.ListType(element_type=elem_type):
                     assert False
-                    #list = dbpy.CallBuiltin(to_mlir_type(r.type), str_attr("list.create"), []).result
-                    #block = ir.Block()
-                    #for elem in v:
+                    # list = dbpy.CallBuiltin(to_mlir_type(r.type), str_attr("list.create"), []).result
+                    # block = ir.Block()
+                    # for elem in v:
                     #    constOp = ir.Constant(block, elem, elem_type)
                     #    to_mlir_stmt(constOp, mapping)
                     #    dbpy.CallBuiltin(to_mlir_type(r.type), str_attr("list.append"), [list, mapping[constOp.result]])
-                    #mapping[r] = list
+                    # mapping[r] = list
                 case _:
                     res_type = to_mlir_type(r.type)
                     if (isinstance(res_type, mlir.IntegerType)):
                         mapping[r] = arith.ConstantOp(res_type, v).result
                     else:
-                        #mapping[r] = dbpy.ConstantOp(to_mlir_type(r.type), str_attr(str(v))).result
+                        # mapping[r] = dbpy.ConstantOp(to_mlir_type(r.type), str_attr(str(v))).result
                         assert False
         case ir.CallBuiltin(result=r, name=name, args=args):
             arg_types = [arg.type for arg in args]
@@ -101,7 +126,7 @@ def to_mlir_stmt(stmt, mapping):
                 case "undef", _:
                     mapping[r] = util.UndefOp(to_mlir_type(r.type)).result
                 case "scalar.int.add", [ir.IntegerType(), ir.IntegerType()]:
-                        mapping[r] = arith.AddIOp(mapping[args[0]], mapping[args[1]]).result
+                    mapping[r] = arith.AddIOp(mapping[args[0]], mapping[args[1]]).result
                 case "scalar.int.add", [ir.IntType(), ir.IntType()]:
                     mapping[r] = arith.AddIOp(mapping[args[0]], mapping[args[1]]).result
                 case "scalar.int.sub", [ir.IntegerType(), ir.IntegerType()]:
@@ -184,34 +209,61 @@ def to_mlir_stmt(stmt, mapping):
                 case "scalar.string.compare.lte", [ir.StringType(), ir.StringType()]:
                     mapping[r] = db.CmpOp(db.DBCmpPredicate.lte, mapping[args[0]], mapping[args[1]]).result
                 case "scalar.string.lower", [ir.StringType()]:
-                    mapping[r] = db.RuntimeCall(db.StringType.get(curr_context),str_attr("ToLower"), [mapping[args[0]]]).result
+                    mapping[r] = db.RuntimeCall(db.StringType.get(curr_context), str_attr("ToLower"),
+                                                [mapping[args[0]]]).result
                 case "scalar.string.contains", [ir.StringType(), ir.StringType()]:
-                    mapping[r] = db.RuntimeCall(mlirtypes.bool(),str_attr("Contains"), [mapping[args[0]], mapping[args[1]]]).result
+                    mapping[r] = db.RuntimeCall(mlirtypes.bool(), str_attr("Contains"),
+                                                [mapping[args[0]], mapping[args[1]]]).result
                 case "scalar.string.length", [ir.StringType()]:
-                    mapping[r]= db.RuntimeCall(mlirtypes.i64(),str_attr("StringLength"), [mapping[args[0]]]).result
+                    mapping[r] = db.RuntimeCall(mlirtypes.i64(), str_attr("StringLength"), [mapping[args[0]]]).result
                 case "scalar.string.find", [ir.StringType(), ir.StringType(), ir.IntType(), ir.IntType()]:
-                    mapping[r] = db.RuntimeCall(mlirtypes.i64(), str_attr("PyStringFind"), [mapping[args[0]], mapping[args[1]], mapping[args[2]],mapping[args[3]]]).result
+                    mapping[r] = db.RuntimeCall(mlirtypes.i64(), str_attr("PyStringFind"),
+                                                [mapping[args[0]], mapping[args[1]], mapping[args[2]],
+                                                 mapping[args[3]]]).result
                 case "scalar.string.rfind", [ir.StringType(), ir.StringType(), ir.IntType(), ir.IntType()]:
-                    mapping[r] = db.RuntimeCall(mlirtypes.i64(), str_attr("PyStringRFind"), [mapping[args[0]], mapping[args[1]], mapping[args[2]],mapping[args[3]]]).result
+                    mapping[r] = db.RuntimeCall(mlirtypes.i64(), str_attr("PyStringRFind"),
+                                                [mapping[args[0]], mapping[args[1]], mapping[args[2]],
+                                                 mapping[args[3]]]).result
                 case "scalar.string.substr", [ir.StringType(), ir.IntType(), ir.IntType()]:
-                    offsetP1=arith.AddIOp(mapping[args[1]],arith.ConstantOp(mlirtypes.i64(),1).result).result
-                    mapping[r] = db.RuntimeCall(db.StringType.get(curr_context), str_attr("Substring"), [mapping[args[0]],offsetP1,mapping[args[2]]]).result
+                    offsetP1 = arith.AddIOp(mapping[args[1]], arith.ConstantOp(mlirtypes.i64(), 1).result).result
+                    mapping[r] = db.RuntimeCall(db.StringType.get(curr_context), str_attr("Substring"), # todo: check if substring is still implemented correctly
+                                                [mapping[args[0]], offsetP1, mapping[args[2]]]).result
                 case "scalar.string.replace", [ir.StringType(), ir.StringType(), ir.StringType()]:
-                    mapping[r] = db.RuntimeCall(db.StringType.get(curr_context), str_attr("Replace"), [mapping[args[0]], mapping[args[1]], mapping[args[2]]]).result
+                    mapping[r] = db.RuntimeCall(db.StringType.get(curr_context), str_attr("Replace"),
+                                                [mapping[args[0]], mapping[args[1]], mapping[args[2]]]).result
                 case "scalar.int.from_string", [ir.StringType()]:
                     mapping[r] = db.CastOp(to_mlir_type(r.type), mapping[args[0]]).result
                 case "scalar.string.concatenate", [ir.StringType(), ir.StringType()]:
-                    mapping[r] = db.RuntimeCall(db.StringType.get(curr_context), str_attr("Concatenate"), [mapping[args[0]], mapping[args[1]]]).result
+                    mapping[r] = db.RuntimeCall(db.StringType.get(curr_context), str_attr("Concatenate"),
+                                                [mapping[args[0]], mapping[args[1]]]).result
+                case "scalar.string.at", [ir.StringType(), ir.IntType()]:
+                    mapping[r] = db.RuntimeCall(db.StringType.get(curr_context), str_attr("Substring"),
+                                                [mapping[args[0]],
+                                                 arith.AddIOp(mapping[args[1]], arith.ConstantOp(mlirtypes.i64(), 1).result).result,
+                                                 arith.ConstantOp(mlirtypes.i64(), 1).result]).result
+
+                case "scalar.string.iter", [ir.FunctionRefType(), ir.RecordType(),ir.RecordType(), ir.StringType()]:
+                    str_length= db.RuntimeCall(mlirtypes.i64(), str_attr("StringLength"), [mapping[args[3]]]).result
+                    str_length = arith.IndexCastOp(mlirtypes.index(), str_length).result
+                    const0 = arith.ConstantOp(mlirtypes.index(), 0).result
+                    const1 = arith.ConstantOp(mlirtypes.index(), 1).result
+                    forOp=scf.ForOp(const0, str_length, const1, [mapping[args[2]]])
+                    with mlir.InsertionPoint(forOp.body):
+                        char = db.RuntimeCall(db.StringType.get(curr_context), str_attr("Substring"),
+                                              [mapping[args[3]],forOp.induction_variable, arith.AddIOp(forOp.induction_variable, const1).result]).result
+                        next_iter_val=call(args[0], [mapping[args[1]], forOp.inner_iter_args[0], char],mapping)
+                        scf.YieldOp([next_iter_val])
+                    mapping[r] = forOp.result
                 case "dbg.print", [ir.StringType()]:
                     db.RuntimeCall(None, str_attr("DumpValue"), [mapping[args[0]]])
                 case _:
-                    print("Can not translate op", name , "for types", arg_types, file=sys.stderr)
-                    mapping[r]= util.UndefOp(to_mlir_type(r.type)).result
+                    print("Can not translate op", name, "for types", arg_types, file=sys.stderr)
+                    mapping[r] = util.UndefOp(to_mlir_type(r.type)).result
         case ir.Call(result=r, name=callee, args=args):
             mlir_args = [mapping[arg] for arg in args]
             if (isinstance(r.type, ir.VoidType)):
                 func.CallOp([], callee, mlir_args)
-                #c = dbpy.ConstantOp(to_mlir_type(r.type), str_attr("None"))
+                # c = dbpy.ConstantOp(to_mlir_type(r.type), str_attr("None"))
                 assert False
             else:
                 c = func.CallOp([to_mlir_type(r.type)], callee, mlir_args)
@@ -231,7 +283,22 @@ def to_mlir_stmt(stmt, mapping):
             scf.YieldOp([mapping[value] for value in values])
         case ir.FunctionRef(result=r, name=name):
             mapping[r] = func.ConstantOp(to_mlir_type(r.type), mlir.FlatSymbolRefAttr.get(name)).result
-
+        case ir.MakeRecord(result=r,res_type=res_type, values=values):
+            ordered_members= [m for m,t in res_type.members]
+            mapping[r]=util.PackOp(to_mlir_type(res_type), [mapping[values[m]] for m in ordered_members]).result
+        case ir.RecordGet(result=r, record=record, member=member):
+            match record.type:
+                case ir.RecordType(members=members):
+                    for m, t in members:
+                        if m == member:
+                            member_index = members.index((m, t))
+                            break
+                    else:
+                        assert False, f"Member {member} not found in record {record.type}"
+                    index_attr = mlir.IntegerAttr.get(mlir.IntegerType.get_signless(32), member_index)
+                    mapping[r] = util.GetTupleOp(to_mlir_type(r.type), mapping[record], index_attr).result
+                case _:
+                    assert False, f"Expected record type, got {record.type}"
         case _:
             print(stmt)
             assert False
@@ -273,5 +340,3 @@ def to_mlir_module(module):
 def compile(module):
     mlir_module = to_mlir_module(module)
     return mlir_module
-
-
