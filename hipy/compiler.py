@@ -1257,7 +1257,8 @@ def compile_function(hlc_function, arg_types, kw_types, module, fallback, debug)
         if res is None:
             res = ir.Constant(fn.body, None, ir.void).result
         else:
-            res = res.get_ir_value(ctxt)
+            with ctxt.handle_action("func_res"):
+                res = res.get_ir_value(ctxt)
         ir.Return(fn.body, [res])
         fn.res_type = res.type
 
