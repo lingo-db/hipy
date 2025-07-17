@@ -35,12 +35,15 @@ def to_mlir_type(t):
         case ir.IntType():
             return mlirtypes.i64()
         case ir.RecordType(members=members):
-            return mlirtypes.TupleType.get_tuple([to_mlir_type(t) for m,t in members], curr_context)
+            return mlirtypes.TupleType.get_tuple([to_mlir_type(t) for m, t in members], curr_context)
         case ir.FunctionRefType(arg_types=arg_types, res_type=res_type, closure_type=closure_type):
             if closure_type is None:
-                return mlirtypes.FunctionType.get([to_mlir_type(t) for t in arg_types],[to_mlir_type(res_type)], curr_context)
+                return mlirtypes.FunctionType.get([to_mlir_type(t) for t in arg_types], [to_mlir_type(res_type)],
+                                                  curr_context)
             else:
                 assert False
+        case ir.ListType(element_type=elem_type):
+            return db.ListType.get(to_mlir_type(elem_type))
         case _:
             assert False
     print(t)
@@ -69,6 +72,7 @@ def get_tmp_member_name():
 
 helper_fn_cntr = 0
 
+
 def call(callee, args, mapping):
     match callee.type:
         case ir.FunctionRefType(arg_types=arg_types, res_type=res_type, closure_type=closure_type):
@@ -83,7 +87,7 @@ def call(callee, args, mapping):
                             callOp = func.CallOp([to_mlir_type(res_type)], func_name, args)
                             return callOp.results[0]
                         case _:
-                            callOp = func.CallIndirectOp([to_mlir_type(res_type)], mapping[callee],args)
+                            callOp = func.CallIndirectOp([to_mlir_type(res_type)], mapping[callee], args)
                             return callOp.results[0]
     assert False
 
@@ -211,6 +215,9 @@ def to_mlir_stmt(stmt, mapping):
                 case "scalar.string.lower", [ir.StringType()]:
                     mapping[r] = db.RuntimeCall(db.StringType.get(curr_context), str_attr("ToLower"),
                                                 [mapping[args[0]]]).result
+                case "scalar.string.upper", [ir.StringType()]:
+                    mapping[r] = db.RuntimeCall(db.StringType.get(curr_context), str_attr("ToUpper"),
+                                                [mapping[args[0]]]).result
                 case "scalar.string.contains", [ir.StringType(), ir.StringType()]:
                     mapping[r] = db.RuntimeCall(mlirtypes.bool(), str_attr("Contains"),
                                                 [mapping[args[0]], mapping[args[1]]]).result
@@ -225,9 +232,9 @@ def to_mlir_stmt(stmt, mapping):
                                                 [mapping[args[0]], mapping[args[1]], mapping[args[2]],
                                                  mapping[args[3]]]).result
                 case "scalar.string.substr", [ir.StringType(), ir.IntType(), ir.IntType()]:
+                    length = arith.SubIOp(mapping[args[2]],mapping[args[1]]).result
                     offsetP1 = arith.AddIOp(mapping[args[1]], arith.ConstantOp(mlirtypes.i64(), 1).result).result
-                    mapping[r] = db.RuntimeCall(db.StringType.get(curr_context), str_attr("Substring"), # todo: check if substring is still implemented correctly
-                                                [mapping[args[0]], offsetP1, mapping[args[2]]]).result
+                    mapping[r] = db.RuntimeCall(db.StringType.get(curr_context), str_attr("Substring"),[mapping[args[0]], offsetP1, length]).result
                 case "scalar.string.replace", [ir.StringType(), ir.StringType(), ir.StringType()]:
                     mapping[r] = db.RuntimeCall(db.StringType.get(curr_context), str_attr("Replace"),
                                                 [mapping[args[0]], mapping[args[1]], mapping[args[2]]]).result
@@ -239,23 +246,80 @@ def to_mlir_stmt(stmt, mapping):
                 case "scalar.string.at", [ir.StringType(), ir.IntType()]:
                     mapping[r] = db.RuntimeCall(db.StringType.get(curr_context), str_attr("Substring"),
                                                 [mapping[args[0]],
-                                                 arith.AddIOp(mapping[args[1]], arith.ConstantOp(mlirtypes.i64(), 1).result).result,
+                                                 arith.AddIOp(mapping[args[1]],
+                                                              arith.ConstantOp(mlirtypes.i64(), 1).result).result,
                                                  arith.ConstantOp(mlirtypes.i64(), 1).result]).result
 
-                case "scalar.string.iter", [ir.FunctionRefType(), ir.RecordType(),ir.RecordType(), ir.StringType()]:
-                    str_length= db.RuntimeCall(mlirtypes.i64(), str_attr("StringLength"), [mapping[args[3]]]).result
+                case "scalar.string.iter", [ir.FunctionRefType(), ir.RecordType(), ir.RecordType(), ir.StringType()]:
+                    str_length = db.RuntimeCall(mlirtypes.i64(), str_attr("StringLength"), [mapping[args[3]]]).result
                     str_length = arith.IndexCastOp(mlirtypes.index(), str_length).result
-                    const0 = arith.ConstantOp(mlirtypes.index(), 0).result
                     const1 = arith.ConstantOp(mlirtypes.index(), 1).result
-                    forOp=scf.ForOp(const0, str_length, const1, [mapping[args[2]]])
+                    str_lengthp1 = arith.AddIOp(str_length, const1).result
+                    forOp = scf.ForOp(const1, str_lengthp1, const1, [mapping[args[2]]])
                     with mlir.InsertionPoint(forOp.body):
                         char = db.RuntimeCall(db.StringType.get(curr_context), str_attr("Substring"),
-                                              [mapping[args[3]],forOp.induction_variable, arith.AddIOp(forOp.induction_variable, const1).result]).result
-                        next_iter_val=call(args[0], [mapping[args[1]], forOp.inner_iter_args[0], char],mapping)
+                                              [mapping[args[3]], forOp.induction_variable,const1]).result
+                        next_iter_val = call(args[0], [mapping[args[1]], forOp.inner_iter_args[0], char], mapping)
                         scf.YieldOp([next_iter_val])
                     mapping[r] = forOp.result
+                case "list.iter", [ir.FunctionRefType(), ir.RecordType(), ir.RecordType(), ir.ListType()]:
+                    list_length = db.ListLengthOp(mapping[args[3]]).result
+                    const0 = arith.ConstantOp(mlirtypes.index(), 0).result
+                    const1 = arith.ConstantOp(mlirtypes.index(), 1).result
+                    forOp = scf.ForOp(const0, list_length, const1, [mapping[args[2]]])
+                    with mlir.InsertionPoint(forOp.body):
+                        elem = db.ListGetOp(to_mlir_type(args[3].type.element_type), mapping[args[3]],
+                                            forOp.induction_variable).result
+                        next_iter_val = call(args[0], [mapping[args[1]], forOp.inner_iter_args[0], elem], mapping)
+                        scf.YieldOp([next_iter_val])
+                    mapping[r] = forOp.result
+
+                case "list.create", []:
+                    mapping[r] = db.CreateListOp(to_mlir_type(r.type)).result
+                case "list.at", [ir.ListType(), ir.IntType()]:
+                    as_index = arith.IndexCastOp(mlirtypes.index(), mapping[args[1]]).result
+                    mapping[r] = db.ListGetOp(to_mlir_type(r.type), mapping[args[0]], as_index).result
+                case "list.append", [ir.ListType(), elem_type]:
+                    db.ListAppendOp(mapping[args[0]], mapping[args[1]])
+                case "scalar.string.split", [ir.StringType(), ir.StringType(), ir.IntType()]:
+                    mapping[r] = db.RuntimeCall(db.ListType.get(db.StringType.get(curr_context)),
+                                                str_attr("StringSplit"),
+                                                [mapping[args[0]], mapping[args[1]], mapping[args[2]]]).result
+                case "scalar.string.ord", [ir.StringType()]:
+                    mapping[r] = db.RuntimeCall(mlirtypes.i64(), str_attr("Ord"), [mapping[args[0]]]).result
+                case "range.iter", [ir.FunctionRefType(), ir.RecordType(), ir.RecordType(), ir.IntType(), ir.IntType(), ir.IntType()]:
+                    start = arith.IndexCastOp(mlirtypes.index(), mapping[args[3]]).result
+                    end = arith.IndexCastOp(mlirtypes.index(), mapping[args[4]]).result
+                    step = arith.IndexCastOp(mlirtypes.index(), mapping[args[5]]).result
+                    negativeStep = arith.CmpIOp(arith.CmpIPredicate.slt, step, arith.ConstantOp(mlirtypes.index(), 0).result).result
+                    whileOp = scf.WhileOp([mlirtypes.index(),mapping[args[2]].type], [start, mapping[args[2]]])
+                    beforeBlock=whileOp.before.blocks.append()
+                    afterBlock=whileOp.after.blocks.append()
+                    uLoc = mlir.Location.unknown()
+                    iArgBefore = beforeBlock.add_argument(mlirtypes.index(),uLoc)
+                    iArgAfter = afterBlock.add_argument(mlirtypes.index(),uLoc)
+                    iterArgBefore = beforeBlock.add_argument(mapping[args[2]].type,uLoc)
+                    iterArgAfter = afterBlock.add_argument(mapping[args[2]].type,uLoc)
+                    with mlir.InsertionPoint(beforeBlock):
+                        # if step<0 ? itervar[0]> end : itervar[0] < end
+                        cond1 = arith.CmpIOp(arith.CmpIPredicate.sgt, iArgBefore, end).result
+                        cond2 = arith.CmpIOp(arith.CmpIPredicate.slt, iArgBefore, end).result
+                        cond = arith.SelectOp(negativeStep, cond1, cond2).result
+                        scf.ConditionOp(cond, [iArgBefore, iterArgBefore])
+                    with mlir.InsertionPoint(afterBlock):
+                        iAsI64 = arith.IndexCastOp(mlirtypes.i64(), iArgAfter).result
+                        next_iter_val = call(args[0], [mapping[args[1]],  iterArgAfter, iAsI64], mapping)
+                        next_itervar = arith.AddIOp(iArgAfter, step).result
+                        scf.YieldOp([next_itervar, next_iter_val])
+                    mapping[r] = whileOp.results[1]
+
                 case "dbg.print", [ir.StringType()]:
                     db.RuntimeCall(None, str_attr("DumpValue"), [mapping[args[0]]])
+                case "list.set", [ir.ListType(), ir.IntType(), elem_type]:
+                    as_index = arith.IndexCastOp(mlirtypes.index(), mapping[args[1]]).result
+                    db.ListSetOp(mapping[args[0]], as_index, mapping[args[2]])
+                case "scalar.int.to_string", [ir.IntType()]:
+                    mapping[r] = db.CastOp(to_mlir_type(r.type), mapping[args[0]]).result
                 case _:
                     print("Can not translate op", name, "for types", arg_types, file=sys.stderr)
                     mapping[r] = util.UndefOp(to_mlir_type(r.type)).result
@@ -283,9 +347,12 @@ def to_mlir_stmt(stmt, mapping):
             scf.YieldOp([mapping[value] for value in values])
         case ir.FunctionRef(result=r, name=name):
             mapping[r] = func.ConstantOp(to_mlir_type(r.type), mlir.FlatSymbolRefAttr.get(name)).result
-        case ir.MakeRecord(result=r,res_type=res_type, values=values):
-            ordered_members= [m for m,t in res_type.members]
-            mapping[r]=util.PackOp(to_mlir_type(res_type), [mapping[values[m]] for m in ordered_members]).result
+        case ir.MakeRecord(result=r, res_type=res_type, values=values):
+            ordered_members = [m for m, t in res_type.members]
+            if len(ordered_members)==0:
+                mapping[r] = util.UndefOp(to_mlir_type(res_type)).result
+            else:
+                mapping[r] = util.PackOp(to_mlir_type(res_type), [mapping[values[m]] for m in ordered_members]).result
         case ir.RecordGet(result=r, record=record, member=member):
             match record.type:
                 case ir.RecordType(members=members):

@@ -12,11 +12,11 @@ from hipy.value import SimpleType
 file = sys.argv[1] if len(sys.argv) > 1 else None
 function = sys.argv[2] if len(sys.argv) > 2 else None
 
-arg_types_json = json.loads(sys.argv[3]) if len(sys.argv) > 3 else []
+arg_types_json = json.loads(sys.argv[3]) if len(sys.argv) > 3 else None
 
 
 
-if file is None or function is None or not arg_types_json:
+if file is None or function is None or arg_types_json is None:
     print("Usage: python compile.py <file> <function> <arg_types_json> [<output_file>]")
     print("Example: python compile.py test.py extractType '[\"str\"]'")
     sys.exit(1)
