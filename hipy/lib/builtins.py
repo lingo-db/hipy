@@ -635,6 +635,11 @@ class str(Value):
     @hipy.compiled_function
     def rstrip(self):
         return intrinsics.call_builtin("scalar.string.rstrip", str, [self])
+
+    @hipy.compiled_function
+    def __iadd__(self, other):
+        return self + other
+
     @hipy.compiled_function
     def __add__(self, other):
         if intrinsics.isa(other, str):
