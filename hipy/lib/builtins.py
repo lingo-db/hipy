@@ -474,6 +474,10 @@ class float(Value):
             intrinsics.not_implemented()
 
     @hipy.compiled_function
+    def __neg__(self):
+        return intrinsics.call_builtin("scalar.float.neg", float, [self])
+
+    @hipy.compiled_function
     def __add__(self, other):
         return self._float_op("add", other)
 
@@ -1939,3 +1943,13 @@ def sorted(input):
     l = list(input)
     l.sort()
     return l
+
+
+@hipy.compiled_function
+def abs(x):
+    if intrinsics.isa(x, int):
+        return x if x >= 0 else -x
+    elif intrinsics.isa(x, float):
+        return x if x >= 0.0 else -x
+    else:
+        intrinsics.not_implemented()
