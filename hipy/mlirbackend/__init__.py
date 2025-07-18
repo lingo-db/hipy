@@ -44,6 +44,10 @@ def to_mlir_type(t):
                 assert False
         case ir.ListType(element_type=elem_type):
             return db.ListType.get(to_mlir_type(elem_type))
+        case ir.DictType(key_type=key_type, val_type=val_type):
+            return db.DictType.get(to_mlir_type(key_type), to_mlir_type(val_type))
+        case ir.VoidType():
+            return mlirtypes.IntegerType.get_signless(1) # MLIR does not have a void type, so we use a dummy type
         case _:
             assert False
     print(t)
@@ -102,6 +106,8 @@ def to_mlir_stmt(stmt, mapping):
                 func.ReturnOp([mapping[value]])
         case ir.Constant(result=r, v=v):
             match r.type:
+                case ir.VoidType():
+                    mapping[r] = util.UndefOp(to_mlir_type(r.type)).result
                 case ir.BoolType():
                     mapping[r] = arith.ConstantOp(to_mlir_type(r.type), 1 if v else 0).result
                 case ir.IntegerType() | ir.FloatType():
@@ -281,6 +287,8 @@ def to_mlir_stmt(stmt, mapping):
                     mapping[r] = db.ListGetOp(to_mlir_type(r.type), mapping[args[0]], as_index).result
                 case "list.append", [ir.ListType(), elem_type]:
                     db.ListAppendOp(mapping[args[0]], mapping[args[1]])
+                case "list.length", [ir.ListType()]:
+                    mapping[r] = db.ListLengthOp(mapping[args[0]]).result
                 case "scalar.string.split", [ir.StringType(), ir.StringType(), ir.IntType()]:
                     mapping[r] = db.RuntimeCall(db.ListType.get(db.StringType.get(curr_context)),
                                                 str_attr("StringSplit"),
@@ -320,8 +328,39 @@ def to_mlir_stmt(stmt, mapping):
                     db.ListSetOp(mapping[args[0]], as_index, mapping[args[2]])
                 case "scalar.int.to_string", [ir.IntType()]:
                     mapping[r] = db.CastOp(to_mlir_type(r.type), mapping[args[0]]).result
+                case "dict.create", []:
+                    mapping[r] = db.CreateDictOp(to_mlir_type(r.type), mlir.SymbolRefAttr.get(["a"])).result
+                case "dict.iter_items", [ir.FunctionRefType(), ir.RecordType(), ir.RecordType(), ir.DictType(key_type=key_type, val_type=val_type)]:
+                    iter = db.DictGetIter(db.DictIterType.get(to_mlir_type(key_type), to_mlir_type(val_type)),mapping[args[3]]).result
+                    whileOp = scf.WhileOp([mapping[args[2]].type], [mapping[args[2]]])
+                    beforeBlock = whileOp.before.blocks.append()
+                    afterBlock = whileOp.after.blocks.append()
+                    uLoc = mlir.Location.unknown()
+                    iterArgBefore = beforeBlock.add_argument(mapping[args[2]].type, uLoc)
+                    iterArgAfter = afterBlock.add_argument(mapping[args[2]].type, uLoc)
+                    with mlir.InsertionPoint(beforeBlock):
+                        is_valid = db.DictIterValid(iter).result
+                        scf.ConditionOp(is_valid, [iterArgBefore])
+                    with mlir.InsertionPoint(afterBlock):
+                        key = db.DictIterGetKey(to_mlir_type(key_type),iter).result
+                        value = db.DictIterGetValue(to_mlir_type(val_type),iter).result
+                        packed = util.PackOp(mlirtypes.TupleType.get_tuple([key.type, value.type]),[key, value]).result
+                        next_iter_val = call(args[0], [mapping[args[1]], iterArgAfter, packed], mapping)
+                        db.DictIterNext(iter)
+                        scf.YieldOp([next_iter_val])
+                    mapping[r] = whileOp.results[0]
+                case "dict.contains", [ir.DictType(), key_type]:
+                    hashed = db.Hash(mapping[args[1]]).result
+                    mapping[r] = db.DictContainsOp(mapping[args[0]], mapping[args[1]],hashed).result
+                case "dict.get", [ir.DictType(), key_type]:
+                    hashed = db.Hash(mapping[args[1]]).result
+                    mapping[r] = db.DictGetOp(to_mlir_type(r.type), mapping[args[0]], mapping[args[1]], hashed).result
+                case "dict.set", [ir.DictType(), key_type, val_type]:
+                    hashed = db.Hash(mapping[args[1]]).result
+                    db.DictSetOp(mapping[args[0]], mapping[args[1]], hashed, mapping[args[2]])
                 case _:
                     print("Can not translate op", name, "for types", arg_types, file=sys.stderr)
+                    assert False
                     mapping[r] = util.UndefOp(to_mlir_type(r.type)).result
         case ir.Call(result=r, name=callee, args=args):
             mlir_args = [mapping[arg] for arg in args]
