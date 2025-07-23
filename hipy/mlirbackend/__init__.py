@@ -9,7 +9,6 @@ import lingodbbridge.mlir._mlir_libs.mlir_init as mlir_init
 import lingodbbridge.mlir.extras.types as mlirtypes
 import lingodbbridge
 import hipy.ir as ir
-import lingodb
 
 curr_context = None
 curr_module = None
@@ -288,7 +287,8 @@ def to_mlir_stmt(stmt, mapping):
                 case "list.append", [ir.ListType(), elem_type]:
                     db.ListAppendOp(mapping[args[0]], mapping[args[1]])
                 case "list.length", [ir.ListType()]:
-                    mapping[r] = db.ListLengthOp(mapping[args[0]]).result
+                    length_as_index = db.ListLengthOp(mapping[args[0]]).result
+                    mapping[r] = arith.IndexCastOp(mlirtypes.i64(), length_as_index).result
                 case "scalar.string.split", [ir.StringType(), ir.StringType(), ir.IntType()]:
                     mapping[r] = db.RuntimeCall(db.ListType.get(db.StringType.get(curr_context)),
                                                 str_attr("StringSplit"),
@@ -296,16 +296,16 @@ def to_mlir_stmt(stmt, mapping):
                 case "scalar.string.ord", [ir.StringType()]:
                     mapping[r] = db.RuntimeCall(mlirtypes.i64(), str_attr("Ord"), [mapping[args[0]]]).result
                 case "range.iter", [ir.FunctionRefType(), ir.RecordType(), ir.RecordType(), ir.IntType(), ir.IntType(), ir.IntType()]:
-                    start = arith.IndexCastOp(mlirtypes.index(), mapping[args[3]]).result
-                    end = arith.IndexCastOp(mlirtypes.index(), mapping[args[4]]).result
-                    step = arith.IndexCastOp(mlirtypes.index(), mapping[args[5]]).result
-                    negativeStep = arith.CmpIOp(arith.CmpIPredicate.slt, step, arith.ConstantOp(mlirtypes.index(), 0).result).result
-                    whileOp = scf.WhileOp([mlirtypes.index(),mapping[args[2]].type], [start, mapping[args[2]]])
+                    start = mapping[args[3]]
+                    end = mapping[args[4]]
+                    step = mapping[args[5]]
+                    negativeStep = arith.CmpIOp(arith.CmpIPredicate.slt, step, arith.ConstantOp(step.type, 0).result).result
+                    whileOp = scf.WhileOp([start.type,mapping[args[2]].type], [start, mapping[args[2]]])
                     beforeBlock=whileOp.before.blocks.append()
                     afterBlock=whileOp.after.blocks.append()
                     uLoc = mlir.Location.unknown()
-                    iArgBefore = beforeBlock.add_argument(mlirtypes.index(),uLoc)
-                    iArgAfter = afterBlock.add_argument(mlirtypes.index(),uLoc)
+                    iArgBefore = beforeBlock.add_argument(start.type,uLoc)
+                    iArgAfter = afterBlock.add_argument(start.type,uLoc)
                     iterArgBefore = beforeBlock.add_argument(mapping[args[2]].type,uLoc)
                     iterArgAfter = afterBlock.add_argument(mapping[args[2]].type,uLoc)
                     with mlir.InsertionPoint(beforeBlock):
@@ -315,8 +315,7 @@ def to_mlir_stmt(stmt, mapping):
                         cond = arith.SelectOp(negativeStep, cond1, cond2).result
                         scf.ConditionOp(cond, [iArgBefore, iterArgBefore])
                     with mlir.InsertionPoint(afterBlock):
-                        iAsI64 = arith.IndexCastOp(mlirtypes.i64(), iArgAfter).result
-                        next_iter_val = call(args[0], [mapping[args[1]],  iterArgAfter, iAsI64], mapping)
+                        next_iter_val = call(args[0], [mapping[args[1]],  iterArgAfter, iArgAfter], mapping)
                         next_itervar = arith.AddIOp(iArgAfter, step).result
                         scf.YieldOp([next_itervar, next_iter_val])
                     mapping[r] = whileOp.results[1]
@@ -328,8 +327,12 @@ def to_mlir_stmt(stmt, mapping):
                     db.ListSetOp(mapping[args[0]], as_index, mapping[args[2]])
                 case "scalar.int.to_string", [ir.IntType()]:
                     mapping[r] = db.CastOp(to_mlir_type(r.type), mapping[args[0]]).result
-                case "dict.create", []:
-                    mapping[r] = db.CreateDictOp(to_mlir_type(r.type), mlir.SymbolRefAttr.get(["a"])).result
+                case "dict.create", [ir.FunctionRefType()]:
+                    match args[0].producer:
+                        case ir.FunctionRef(name=func_name):
+                            mapping[r] = db.CreateDictOp(to_mlir_type(r.type), mlir.FlatSymbolRefAttr.get(func_name)).result
+                        case _:
+                            assert False, "Dict creation with closure type not supported"
                 case "dict.iter_items", [ir.FunctionRefType(), ir.RecordType(), ir.RecordType(), ir.DictType(key_type=key_type, val_type=val_type)]:
                     iter = db.DictGetIter(db.DictIterType.get(to_mlir_type(key_type), to_mlir_type(val_type)),mapping[args[3]]).result
                     whileOp = scf.WhileOp([mapping[args[2]].type], [mapping[args[2]]])
@@ -358,6 +361,28 @@ def to_mlir_stmt(stmt, mapping):
                 case "dict.set", [ir.DictType(), key_type, val_type]:
                     hashed = db.Hash(mapping[args[1]]).result
                     db.DictSetOp(mapping[args[0]], mapping[args[1]], hashed, mapping[args[2]])
+                case "scalar.float.from_int", [ir.IntType()]:
+                    mapping[r] = arith.SIToFPOp(to_mlir_type(r.type), mapping[args[0]]).result
+                case "scalar.float.pow", [ir.FloatType(), ir.FloatType()]:
+                    mapping[r] = db.RuntimeCall(to_mlir_type(r.type), str_attr("Pow"),
+                                                [mapping[args[0]], mapping[args[1]]]).result
+                case "scalar.float.neg", [ir.FloatType()]:
+                    mapping[r] = arith.NegFOp(mapping[args[0]]).result
+
+                case "while.iter", [ir.FunctionRefType(), ir.FunctionRefType(), ir.RecordType(), ir.RecordType()]:
+                    whileOp = scf.WhileOp([mapping[args[3]].type], [mapping[args[3]]])
+                    beforeBlock = whileOp.before.blocks.append()
+                    afterBlock = whileOp.after.blocks.append()
+                    uLoc = mlir.Location.unknown()
+                    iterArgBefore = beforeBlock.add_argument(mapping[args[3]].type, uLoc)
+                    iterArgAfter = afterBlock.add_argument(mapping[args[3]].type, uLoc)
+                    with mlir.InsertionPoint(beforeBlock):
+                        cond = call(args[0], [mapping[args[2]], iterArgBefore], mapping)
+                        scf.ConditionOp(cond, [iterArgBefore])
+                    with mlir.InsertionPoint(afterBlock):
+                        next_iter_val = call(args[1], [mapping[args[2]], iterArgAfter], mapping)
+                        scf.YieldOp([next_iter_val])
+                    mapping[r] = whileOp.results[0]
                 case _:
                     print("Can not translate op", name, "for types", arg_types, file=sys.stderr)
                     assert False
