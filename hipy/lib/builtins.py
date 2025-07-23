@@ -6,7 +6,7 @@ from builtins import *
 import builtins
 import hipy
 from hipy.value import CValue, ValueHolder, Value, HLCClassValue, TypeValue, Type, SimpleType, static_object, RawValue, \
-    AnyType, ConstIterValue
+    AnyType, ConstIterValue, HLCFunctionValue
 import hipy.ir as ir
 import hipy.intrinsics as intrinsics
 
@@ -1243,7 +1243,10 @@ class dict(Value):
     def __merge__(self, other, self_fn, other_fn, context):
         def to_empty_dict(key_type, value_type):
             def fn(context):
-                return context.wrap(context.call_builtin("dict.create", dict.DictType(key_type, value_type), []))
+                k_type = context.wrap(TypeValue(key_type))
+                create_cmp_fn_val = context.wrap(HLCFunctionValue(_create_cmp_fn))
+                eq_fn = context.perform_call(create_cmp_fn_val, [k_type])
+                return context.wrap(context.call_builtin("dict.create", dict.DictType(key_type, value_type), [eq_fn]))
 
             return fn
 
@@ -1439,7 +1442,9 @@ def _type_of_constant(cval):
         case _:
             return object.PythonObjectType()
 
-
+@hipy.compiled_function
+def _create_cmp_fn(key_type):
+    return intrinsics.bind(lambda l, r : l==r, [key_type, key_type])
 @hipy.classdef
 class _concrete_dict(dict):
 
@@ -1459,7 +1464,11 @@ class _concrete_dict(dict):
                                                                             self._to_insert])
 
     def __abstract__(self, _context):
-        l = ValueHolder(_context.call_builtin("dict.create", self.__hipy_get_type__(), []), _context)
+        dict_type=self.__hipy_get_type__()
+        key_type=_context.wrap(TypeValue(self._key_type))
+        create_cmp_fn_val = _context.wrap(HLCFunctionValue(_create_cmp_fn))
+        eq_fn = _context.perform_call(create_cmp_fn_val, [key_type])
+        l = ValueHolder(_context.call_builtin("dict.create", dict_type, [eq_fn]), _context)
 
         for k, v in self.c_dict.items():
             key = _context.constant(k)
