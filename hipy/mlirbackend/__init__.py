@@ -93,8 +93,11 @@ def call(callee, args, mapping):
                             callOp = func.CallIndirectOp([to_mlir_type(res_type)], mapping[callee], args)
                             return callOp.results[0]
     assert False
-
-
+def is_positive_constant(value):
+    match value.producer:
+        case ir.Constant(v=v):
+            return v>0
+    return False
 def to_mlir_stmt(stmt, mapping):
     global helper_fn_cntr
     match stmt:
@@ -299,26 +302,33 @@ def to_mlir_stmt(stmt, mapping):
                     start = mapping[args[3]]
                     end = mapping[args[4]]
                     step = mapping[args[5]]
-                    negativeStep = arith.CmpIOp(arith.CmpIPredicate.slt, step, arith.ConstantOp(step.type, 0).result).result
-                    whileOp = scf.WhileOp([start.type,mapping[args[2]].type], [start, mapping[args[2]]])
-                    beforeBlock=whileOp.before.blocks.append()
-                    afterBlock=whileOp.after.blocks.append()
-                    uLoc = mlir.Location.unknown()
-                    iArgBefore = beforeBlock.add_argument(start.type,uLoc)
-                    iArgAfter = afterBlock.add_argument(start.type,uLoc)
-                    iterArgBefore = beforeBlock.add_argument(mapping[args[2]].type,uLoc)
-                    iterArgAfter = afterBlock.add_argument(mapping[args[2]].type,uLoc)
-                    with mlir.InsertionPoint(beforeBlock):
-                        # if step<0 ? itervar[0]> end : itervar[0] < end
-                        cond1 = arith.CmpIOp(arith.CmpIPredicate.sgt, iArgBefore, end).result
-                        cond2 = arith.CmpIOp(arith.CmpIPredicate.slt, iArgBefore, end).result
-                        cond = arith.SelectOp(negativeStep, cond1, cond2).result
-                        scf.ConditionOp(cond, [iArgBefore, iterArgBefore])
-                    with mlir.InsertionPoint(afterBlock):
-                        next_iter_val = call(args[0], [mapping[args[1]],  iterArgAfter, iArgAfter], mapping)
-                        next_itervar = arith.AddIOp(iArgAfter, step).result
-                        scf.YieldOp([next_itervar, next_iter_val])
-                    mapping[r] = whileOp.results[1]
+                    if is_positive_constant(args[5]):
+                        forOp = scf.ForOp(start, end, step, [mapping[args[2]]])
+                        with mlir.InsertionPoint(forOp.body):
+                            next_iter_val = call(args[0], [mapping[args[1]], forOp.inner_iter_args[0], forOp.induction_variable], mapping)
+                            scf.YieldOp([next_iter_val])
+                        mapping[r] = forOp.result
+                    else:
+                        negativeStep = arith.CmpIOp(arith.CmpIPredicate.slt, step, arith.ConstantOp(step.type, 0).result).result
+                        whileOp = scf.WhileOp([start.type,mapping[args[2]].type], [start, mapping[args[2]]])
+                        beforeBlock=whileOp.before.blocks.append()
+                        afterBlock=whileOp.after.blocks.append()
+                        uLoc = mlir.Location.unknown()
+                        iArgBefore = beforeBlock.add_argument(start.type,uLoc)
+                        iArgAfter = afterBlock.add_argument(start.type,uLoc)
+                        iterArgBefore = beforeBlock.add_argument(mapping[args[2]].type,uLoc)
+                        iterArgAfter = afterBlock.add_argument(mapping[args[2]].type,uLoc)
+                        with mlir.InsertionPoint(beforeBlock):
+                            # if step<0 ? itervar[0]> end : itervar[0] < end
+                            cond1 = arith.CmpIOp(arith.CmpIPredicate.sgt, iArgBefore, end).result
+                            cond2 = arith.CmpIOp(arith.CmpIPredicate.slt, iArgBefore, end).result
+                            cond = arith.SelectOp(negativeStep, cond1, cond2).result
+                            scf.ConditionOp(cond, [iArgBefore, iterArgBefore])
+                        with mlir.InsertionPoint(afterBlock):
+                            next_iter_val = call(args[0], [mapping[args[1]],  iterArgAfter, iArgAfter], mapping)
+                            next_itervar = arith.AddIOp(iArgAfter, step).result
+                            scf.YieldOp([next_itervar, next_iter_val])
+                        mapping[r] = whileOp.results[1]
 
                 case "dbg.print", [ir.StringType()]:
                     db.RuntimeCall(None, str_attr("DumpValue"), [mapping[args[0]]])
@@ -363,6 +373,8 @@ def to_mlir_stmt(stmt, mapping):
                     db.DictSetOp(mapping[args[0]], mapping[args[1]], hashed, mapping[args[2]])
                 case "scalar.float.from_int", [ir.IntType()]:
                     mapping[r] = arith.SIToFPOp(to_mlir_type(r.type), mapping[args[0]]).result
+                case "scalar.int.pyint_to_int64", [ir.IntType()]:
+                    mapping[r] = mapping[args[0]]
                 case "scalar.float.pow", [ir.FloatType(), ir.FloatType()]:
                     mapping[r] = db.RuntimeCall(to_mlir_type(r.type), str_attr("Pow"),
                                                 [mapping[args[0]], mapping[args[1]]]).result
