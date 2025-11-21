@@ -40,7 +40,8 @@ def to_mlir_type(t):
                 return mlirtypes.FunctionType.get([to_mlir_type(t) for t in arg_types], [to_mlir_type(res_type)],
                                                   curr_context)
             else:
-                assert False
+                return mlirtypes.TupleType.get_tuple([mlirtypes.FunctionType.get([to_mlir_type(t) for t in arg_types], [to_mlir_type(res_type)],
+                                                  curr_context), to_mlir_type(closure_type)], curr_context)
         case ir.ListType(element_type=elem_type):
             return db.ListType.get(to_mlir_type(elem_type))
         case ir.DictType(key_type=key_type, val_type=val_type):
@@ -80,7 +81,12 @@ def call(callee, args, mapping):
     match callee.type:
         case ir.FunctionRefType(arg_types=arg_types, res_type=res_type, closure_type=closure_type):
             if closure_type is not None:
-                assert False
+                match callee.producer:
+                    case ir.FunctionRef(name=func_name, closure=closure_value):
+                        callOp = func.CallOp([to_mlir_type(res_type)], func_name, args+[mapping[closure_value]])
+                        return callOp.results[0]
+                    case _:
+                        assert False
             else:
                 if isinstance(res_type, ir.VoidType):
                     assert False
