@@ -437,6 +437,8 @@ class float(Value):
             return val
         elif intrinsics.isa(val, int):
             return intrinsics.call_builtin("scalar.float.from_int", float, [val])
+        elif intrinsics.isa(val, str):
+            return intrinsics.call_builtin("scalar.float.from_string", float, [val])
         else:
             return float._cast_to_float(val)
 

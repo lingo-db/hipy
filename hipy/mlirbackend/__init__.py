@@ -225,6 +225,9 @@ def to_mlir_stmt(stmt, mapping):
                                               arith.ConstantOp(to_mlir_type(ir.BoolType()), 1).result).result
                 case "scalar.float.from_int", [ir.IntegerType()]:
                     mapping[r] = arith.SIToFPOp(to_mlir_type(r.type), mapping[args[0]]).result
+                case "scalar.float.from_string", [ir.StringType()]:
+                    mapping[r] = db.CastOp(to_mlir_type(r.type), mapping[args[0]]).result
+
                 case "scalar.string.compare.eq", [ir.StringType(), ir.StringType()]:
                     mapping[r] = db.CmpOp(db.DBCmpPredicate.eq, mapping[args[0]], mapping[args[1]]).result
                 case "scalar.string.compare.lt", [ir.StringType(), ir.StringType()]:
@@ -392,11 +395,16 @@ def to_mlir_stmt(stmt, mapping):
                     db.DictSetOp(mapping[args[0]], mapping[args[1]], hashed, mapping[args[2]])
                 case "scalar.float.from_int", [ir.IntType()]:
                     mapping[r] = arith.SIToFPOp(to_mlir_type(r.type), mapping[args[0]]).result
+                case "scalar.float.to_int", [ir.FloatType()]:
+                    mapping[r] = arith.FPToSIOp(to_mlir_type(r.type), mapping[args[0]]).result
                 case "scalar.int.pyint_to_int64", [ir.IntType()]:
                     mapping[r] = mapping[args[0]]
                 case "scalar.float.pow", [ir.FloatType(), ir.FloatType()]:
                     mapping[r] = db.RuntimeCall(to_mlir_type(r.type), str_attr("Pow"),
                                                 [mapping[args[0]], mapping[args[1]]]).result
+                case "scalar.float.ceil", [ ir.FloatType()]:
+                    mapping[r] = db.RuntimeCall(to_mlir_type(r.type), str_attr("Ceil"),
+                                                [mapping[args[0]]]).result
                 case "scalar.float.neg", [ir.FloatType()]:
                     mapping[r] = arith.NegFOp(mapping[args[0]]).result
 

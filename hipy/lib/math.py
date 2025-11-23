@@ -12,3 +12,7 @@ def fact(l):
     for i in range(1, l):
         r *= (i+1)
     return r
+
+@hipy.compiled_function
+def ceil(x):
+    return intrinsics.call_builtin("scalar.float.ceil",int,  [x])
