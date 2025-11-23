@@ -40,14 +40,15 @@ def to_mlir_type(t):
                 return mlirtypes.FunctionType.get([to_mlir_type(t) for t in arg_types], [to_mlir_type(res_type)],
                                                   curr_context)
             else:
-                return mlirtypes.TupleType.get_tuple([mlirtypes.FunctionType.get([to_mlir_type(t) for t in arg_types], [to_mlir_type(res_type)],
-                                                  curr_context), to_mlir_type(closure_type)], curr_context)
+                return mlirtypes.TupleType.get_tuple(
+                    [mlirtypes.FunctionType.get([to_mlir_type(t) for t in arg_types], [to_mlir_type(res_type)],
+                                                curr_context), to_mlir_type(closure_type)], curr_context)
         case ir.ListType(element_type=elem_type):
             return db.ListType.get(to_mlir_type(elem_type))
         case ir.DictType(key_type=key_type, val_type=val_type):
             return db.DictType.get(to_mlir_type(key_type), to_mlir_type(val_type))
         case ir.VoidType():
-            return mlirtypes.IntegerType.get_signless(1) # MLIR does not have a void type, so we use a dummy type
+            return mlirtypes.IntegerType.get_signless(1)  # MLIR does not have a void type, so we use a dummy type
         case _:
             assert False
     print(t)
@@ -83,7 +84,7 @@ def call(callee, args, mapping):
             if closure_type is not None:
                 match callee.producer:
                     case ir.FunctionRef(name=func_name, closure=closure_value):
-                        callOp = func.CallOp([to_mlir_type(res_type)], func_name, args+[mapping[closure_value]])
+                        callOp = func.CallOp([to_mlir_type(res_type)], func_name, args + [mapping[closure_value]])
                         return callOp.results[0]
                     case _:
                         assert False
@@ -99,11 +100,15 @@ def call(callee, args, mapping):
                             callOp = func.CallIndirectOp([to_mlir_type(res_type)], mapping[callee], args)
                             return callOp.results[0]
     assert False
+
+
 def is_positive_constant(value):
     match value.producer:
         case ir.Constant(v=v):
-            return v>0
+            return v > 0
     return False
+
+
 def to_mlir_stmt(stmt, mapping):
     global helper_fn_cntr
     match stmt:
@@ -246,9 +251,10 @@ def to_mlir_stmt(stmt, mapping):
                                                 [mapping[args[0]], mapping[args[1]], mapping[args[2]],
                                                  mapping[args[3]]]).result
                 case "scalar.string.substr", [ir.StringType(), ir.IntType(), ir.IntType()]:
-                    length = arith.SubIOp(mapping[args[2]],mapping[args[1]]).result
+                    length = arith.SubIOp(mapping[args[2]], mapping[args[1]]).result
                     offsetP1 = arith.AddIOp(mapping[args[1]], arith.ConstantOp(mlirtypes.i64(), 1).result).result
-                    mapping[r] = db.RuntimeCall(db.StringType.get(curr_context), str_attr("Substring"),[mapping[args[0]], offsetP1, length]).result
+                    mapping[r] = db.RuntimeCall(db.StringType.get(curr_context), str_attr("Substring"),
+                                                [mapping[args[0]], offsetP1, length]).result
                 case "scalar.string.replace", [ir.StringType(), ir.StringType(), ir.StringType()]:
                     mapping[r] = db.RuntimeCall(db.StringType.get(curr_context), str_attr("Replace"),
                                                 [mapping[args[0]], mapping[args[1]], mapping[args[2]]]).result
@@ -272,7 +278,7 @@ def to_mlir_stmt(stmt, mapping):
                     forOp = scf.ForOp(const1, str_lengthp1, const1, [mapping[args[2]]])
                     with mlir.InsertionPoint(forOp.body):
                         char = db.RuntimeCall(db.StringType.get(curr_context), str_attr("Substring"),
-                                              [mapping[args[3]], forOp.induction_variable,const1]).result
+                                              [mapping[args[3]], forOp.induction_variable, const1]).result
                         next_iter_val = call(args[0], [mapping[args[1]], forOp.inner_iter_args[0], char], mapping)
                         scf.YieldOp([next_iter_val])
                     mapping[r] = forOp.result
@@ -304,26 +310,30 @@ def to_mlir_stmt(stmt, mapping):
                                                 [mapping[args[0]], mapping[args[1]], mapping[args[2]]]).result
                 case "scalar.string.ord", [ir.StringType()]:
                     mapping[r] = db.RuntimeCall(mlirtypes.i64(), str_attr("Ord"), [mapping[args[0]]]).result
-                case "range.iter", [ir.FunctionRefType(), ir.RecordType(), ir.RecordType(), ir.IntType(), ir.IntType(), ir.IntType()]:
+                case "range.iter", \
+                     [ir.FunctionRefType(), ir.RecordType(), ir.RecordType(), ir.IntType(), ir.IntType(), ir.IntType()]:
                     start = mapping[args[3]]
                     end = mapping[args[4]]
                     step = mapping[args[5]]
                     if is_positive_constant(args[5]):
                         forOp = scf.ForOp(start, end, step, [mapping[args[2]]])
                         with mlir.InsertionPoint(forOp.body):
-                            next_iter_val = call(args[0], [mapping[args[1]], forOp.inner_iter_args[0], forOp.induction_variable], mapping)
+                            next_iter_val = call(args[0],
+                                                 [mapping[args[1]], forOp.inner_iter_args[0], forOp.induction_variable],
+                                                 mapping)
                             scf.YieldOp([next_iter_val])
                         mapping[r] = forOp.result
                     else:
-                        negativeStep = arith.CmpIOp(arith.CmpIPredicate.slt, step, arith.ConstantOp(step.type, 0).result).result
-                        whileOp = scf.WhileOp([start.type,mapping[args[2]].type], [start, mapping[args[2]]])
-                        beforeBlock=whileOp.before.blocks.append()
-                        afterBlock=whileOp.after.blocks.append()
+                        negativeStep = arith.CmpIOp(arith.CmpIPredicate.slt, step,
+                                                    arith.ConstantOp(step.type, 0).result).result
+                        whileOp = scf.WhileOp([start.type, mapping[args[2]].type], [start, mapping[args[2]]])
+                        beforeBlock = whileOp.before.blocks.append()
+                        afterBlock = whileOp.after.blocks.append()
                         uLoc = mlir.Location.unknown()
-                        iArgBefore = beforeBlock.add_argument(start.type,uLoc)
-                        iArgAfter = afterBlock.add_argument(start.type,uLoc)
-                        iterArgBefore = beforeBlock.add_argument(mapping[args[2]].type,uLoc)
-                        iterArgAfter = afterBlock.add_argument(mapping[args[2]].type,uLoc)
+                        iArgBefore = beforeBlock.add_argument(start.type, uLoc)
+                        iArgAfter = afterBlock.add_argument(start.type, uLoc)
+                        iterArgBefore = beforeBlock.add_argument(mapping[args[2]].type, uLoc)
+                        iterArgAfter = afterBlock.add_argument(mapping[args[2]].type, uLoc)
                         with mlir.InsertionPoint(beforeBlock):
                             # if step<0 ? itervar[0]> end : itervar[0] < end
                             cond1 = arith.CmpIOp(arith.CmpIPredicate.sgt, iArgBefore, end).result
@@ -331,7 +341,7 @@ def to_mlir_stmt(stmt, mapping):
                             cond = arith.SelectOp(negativeStep, cond1, cond2).result
                             scf.ConditionOp(cond, [iArgBefore, iterArgBefore])
                         with mlir.InsertionPoint(afterBlock):
-                            next_iter_val = call(args[0], [mapping[args[1]],  iterArgAfter, iArgAfter], mapping)
+                            next_iter_val = call(args[0], [mapping[args[1]], iterArgAfter, iArgAfter], mapping)
                             next_itervar = arith.AddIOp(iArgAfter, step).result
                             scf.YieldOp([next_itervar, next_iter_val])
                         mapping[r] = whileOp.results[1]
@@ -346,11 +356,14 @@ def to_mlir_stmt(stmt, mapping):
                 case "dict.create", [ir.FunctionRefType()]:
                     match args[0].producer:
                         case ir.FunctionRef(name=func_name):
-                            mapping[r] = db.CreateDictOp(to_mlir_type(r.type), mlir.FlatSymbolRefAttr.get(func_name)).result
+                            mapping[r] = db.CreateDictOp(to_mlir_type(r.type),
+                                                         mlir.FlatSymbolRefAttr.get(func_name)).result
                         case _:
                             assert False, "Dict creation with closure type not supported"
-                case "dict.iter_items", [ir.FunctionRefType(), ir.RecordType(), ir.RecordType(), ir.DictType(key_type=key_type, val_type=val_type)]:
-                    iter = db.DictGetIter(db.DictIterType.get(to_mlir_type(key_type), to_mlir_type(val_type)),mapping[args[3]]).result
+                case "dict.iter_items", [ir.FunctionRefType(), ir.RecordType(), ir.RecordType(), \
+                                         ir.DictType(key_type=key_type, val_type=val_type)]:
+                    iter = db.DictGetIter(db.DictIterType.get(to_mlir_type(key_type), to_mlir_type(val_type)),
+                                          mapping[args[3]]).result
                     whileOp = scf.WhileOp([mapping[args[2]].type], [mapping[args[2]]])
                     beforeBlock = whileOp.before.blocks.append()
                     afterBlock = whileOp.after.blocks.append()
@@ -361,16 +374,16 @@ def to_mlir_stmt(stmt, mapping):
                         is_valid = db.DictIterValid(iter).result
                         scf.ConditionOp(is_valid, [iterArgBefore])
                     with mlir.InsertionPoint(afterBlock):
-                        key = db.DictIterGetKey(to_mlir_type(key_type),iter).result
-                        value = db.DictIterGetValue(to_mlir_type(val_type),iter).result
-                        packed = util.PackOp(mlirtypes.TupleType.get_tuple([key.type, value.type]),[key, value]).result
+                        key = db.DictIterGetKey(to_mlir_type(key_type), iter).result
+                        value = db.DictIterGetValue(to_mlir_type(val_type), iter).result
+                        packed = util.PackOp(mlirtypes.TupleType.get_tuple([key.type, value.type]), [key, value]).result
                         next_iter_val = call(args[0], [mapping[args[1]], iterArgAfter, packed], mapping)
                         db.DictIterNext(iter)
                         scf.YieldOp([next_iter_val])
                     mapping[r] = whileOp.results[0]
                 case "dict.contains", [ir.DictType(), key_type]:
                     hashed = db.Hash(mapping[args[1]]).result
-                    mapping[r] = db.DictContainsOp(mapping[args[0]], mapping[args[1]],hashed).result
+                    mapping[r] = db.DictContainsOp(mapping[args[0]], mapping[args[1]], hashed).result
                 case "dict.get", [ir.DictType(), key_type]:
                     hashed = db.Hash(mapping[args[1]]).result
                     mapping[r] = db.DictGetOp(to_mlir_type(r.type), mapping[args[0]], mapping[args[1]], hashed).result
@@ -401,6 +414,29 @@ def to_mlir_stmt(stmt, mapping):
                         next_iter_val = call(args[1], [mapping[args[2]], iterArgAfter], mapping)
                         scf.YieldOp([next_iter_val])
                     mapping[r] = whileOp.results[0]
+                case "try_except", \
+                     [ir.FunctionRefType(arg_types=try_arg_types, res_type=try_res_type, closure_type=try_closure_type),
+                      ir.FunctionRefType(arg_types=except_arg_types, res_type=except_res_type,
+                                         closure_type=except_closure_type)]:
+                    try_fn = mapping[args[0]]
+                    except_fn = mapping[args[1]]
+                    try_arg = None
+                    except_arg = None
+                    if try_closure_type is not None:
+                        fn_type = mlirtypes.FunctionType.get([to_mlir_type(t) for t in try_arg_types],
+                                                             [to_mlir_type(try_res_type)], curr_context)
+                        unpacked = util.UnPackOp([fn_type, to_mlir_type(try_closure_type)], try_fn).results
+                        try_fn = unpacked[0]
+                        try_arg = unpacked[1]
+                    if except_closure_type is not None:
+                        fn_type = mlirtypes.FunctionType.get([to_mlir_type(t) for t in except_arg_types],
+                                                             [to_mlir_type(except_res_type)], curr_context)
+                        unpacked = util.UnPackOp([fn_type, to_mlir_type(except_closure_type)], except_fn).results
+                        except_fn = unpacked[0]
+                        except_arg = unpacked[1]
+
+                    mapping[r] = db.TryExcept(to_mlir_type(r.type), try_fn, except_fn, try_arg=try_arg,
+                                              except_arg=except_arg).result
                 case _:
                     print("Can not translate op", name, "for types", arg_types, file=sys.stderr)
                     assert False
@@ -427,11 +463,21 @@ def to_mlir_stmt(stmt, mapping):
                 mapping[r2] = r1
         case ir.Yield(values=values):
             scf.YieldOp([mapping[value] for value in values])
-        case ir.FunctionRef(result=r, name=name):
-            mapping[r] = func.ConstantOp(to_mlir_type(r.type), mlir.FlatSymbolRefAttr.get(name)).result
+        case ir.FunctionRef(result=r, name=name, closure=closure):
+            if closure is None:
+                mapping[r] = func.ConstantOp(to_mlir_type(r.type), mlir.FlatSymbolRefAttr.get(name)).result
+            else:
+                match r.type:
+                    case ir.FunctionRefType(arg_types=arg_types, res_type=res_type):
+                        raw_fn_type = mlirtypes.FunctionType.get([to_mlir_type(t) for t in arg_types],
+                                                                 [to_mlir_type(res_type)], curr_context)
+                        raw_fn = func.ConstantOp(raw_fn_type, mlir.FlatSymbolRefAttr.get(name)).result
+                        mapping[r] = util.PackOp(to_mlir_type(r.type), [raw_fn, mapping[closure]]).result
+                    case _:
+                        assert False, "Expected FunctionRefType"
         case ir.MakeRecord(result=r, res_type=res_type, values=values):
             ordered_members = [m for m, t in res_type.members]
-            if len(ordered_members)==0:
+            if len(ordered_members) == 0:
                 mapping[r] = util.UndefOp(to_mlir_type(res_type)).result
             else:
                 mapping[r] = util.PackOp(to_mlir_type(res_type), [mapping[values[m]] for m in ordered_members]).result
