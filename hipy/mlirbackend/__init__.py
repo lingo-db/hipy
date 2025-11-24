@@ -407,6 +407,11 @@ def to_mlir_stmt(stmt, mapping):
                                                 [mapping[args[0]]]).result
                 case "scalar.float.neg", [ir.FloatType()]:
                     mapping[r] = arith.NegFOp(mapping[args[0]]).result
+                case "regex.search", [ir.StringType(), ir.StringType()]:
+                    mapping[r] = db.RuntimeCall(to_mlir_type(r.type), str_attr("RegexSearch"),
+                                                [mapping[args[0]], mapping[args[1]]]).result
+                case "error", [ir.StringType()]:
+                    mapping[r] =db.RuntimeCall(mlirtypes.IntegerType.get_signless(1), str_attr("RaiseRuntimeError"), [mapping[args[0]]]).result
 
                 case "while.iter", [ir.FunctionRefType(), ir.FunctionRefType(), ir.RecordType(), ir.RecordType()]:
                     whileOp = scf.WhileOp([mapping[args[3]].type], [mapping[args[3]]])

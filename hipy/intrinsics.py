@@ -124,7 +124,12 @@ def import_pymodule(name, _context):
             return _context.pyobj(ir.PyImport(_context.block, name).result)
     raise RuntimeError(f"Invalid argument for import_pymodule: {name}")
 
-
+@hipy.raw
+def get_attr(obj, name, _context):
+    match name:
+        case ValueHolder(value=CValue(cval=name)):
+            return _context.get_attr(obj, name)
+    raise RuntimeError(f"Invalid argument for get_attr: {name}")
 @hipy.raw
 def typeof(value, _context):
     t = value.value.__hipy_get_type__()

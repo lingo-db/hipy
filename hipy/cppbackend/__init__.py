@@ -953,6 +953,12 @@ class CPPBackend:
                 return f"{self.generate_result(op.result)} = builtin::date::extractYear({self.generate_value(op.args[0])});"
             case "scalar.float.isnan":
                 return f"{self.generate_result(op.result)} = std::isnan({self.generate_value(op.args[0])});"
+            
+            # Regex support - native C++ for simple patterns, Python fallback for complex ones
+            case "regex.search":
+                return f"{self.generate_result(op.result)} = builtin::regex::search({self.generate_value(op.args[0])}, {self.generate_value(op.args[1])});"
+            case "error":
+                return f'throw std::runtime_error({self.generate_value(op.args[0])});'
             case _:
                 raise NotImplementedError(f"builtin {op.name} not implemented")
 

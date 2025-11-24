@@ -1158,6 +1158,13 @@ class _concrete_list(list):
                                          [other])
         else:
             raise NotImplementedError()
+    @hipy.raw
+    def __mul__(self, multiplier, _context):
+        if isinstance(multiplier.value, _const_int):
+            res = self.value.items * multiplier.value.cval
+            return _context.wrap(_concrete_list(res))
+        else:
+            raise NotImplementedError()
 
     def __hipy_get_type__(self):
         return list.ListType(self._element_type)
@@ -1812,6 +1819,10 @@ class tuple(Value):
     def __hipy__repr__(self):
         return "(" + ", ".join([repr(v) for v in self]) + ("," if len(self) == 1 else "") + ")"
 
+    @hipy.compiled_function
+    def __str__(self):
+        return repr(self)
+
     @hipy.raw
     def __len__(self, _context):
         return _context.constant(len(self.value._elts))
@@ -1964,3 +1975,52 @@ def abs(x):
         return x if x >= 0.0 else -x
     else:
         intrinsics.not_implemented()
+
+
+@hipy.classdef
+class _MaybeNone(static_object["_isNone", "_val"]):
+    def __init__(self, isNone, val):
+        super().__init__(lambda args: _MaybeNone(*args), isNone, val)
+
+    @staticmethod
+    @hipy.raw
+    def __create__(isNone, val, _context=None):
+        return hipy.value.ValueHolder(_MaybeNone(isNone, val), _context)
+    @hipy.compiled_function
+    def __topython__(self):
+        if self._isNone:
+            return intrinsics.call_builtin("python.get_none", object, [])
+        else:
+            return intrinsics.to_python(self._val)
+
+    @hipy.compiled_function
+    def __hipy_getattr__(self, name):
+        if self._isNone:
+            intrinsics.call_builtin("error", None, ["AttributeError: 'NoneType' object has no attribute '" + name + "'"])
+        return intrinsics.get_attr(self._val, name)
+
+    @hipy.compiled_function
+    def __hipy__repr__(self):
+        if self._isNone:
+            return 'None'
+        else:
+            return self._val.__repr__()
+    @hipy.compiled_function
+    def __str__(self):
+        if self._isNone:
+            return 'None'
+        else:
+            return self._val.__str__()
+    @staticmethod
+    def __merge__(self, other, self_fn, other_fn, context):
+        if isinstance(other.value, _MaybeNone):
+            return self, other, lambda val: self.value.__hipy_get_type__().construct(val, context)
+        else:
+            raise NotImplementedError()
+
+    @hipy.compiled_function
+    def __bool__(self):
+        if self._isNone:
+            return False
+        else:
+            return bool(self._val)

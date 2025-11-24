@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <fstream>
 #include<unordered_map>
+        #include <regex>
+        #include <tuple>
 
 #include "datastructures.h"
 
@@ -157,7 +159,39 @@ namespace builtin {
 
         return lines;
     }
+    namespace regex {
+        // returns (successful, startPos, endPod, [(groupStart,groupEnd)])
+        inline std::shared_ptr<std::vector<std::tuple<int64_t,int64_t>>> search(const std::string& pattern, const std::string& text) {
+            try {
+                std::regex reg(pattern);
+                std::smatch match;
+                if (std::regex_search(text, match, reg)) {
+                    int64_t start = match.position(0);
+                    int64_t end = start + match.length(0);
+                    std::vector<std::tuple<int64_t,int64_t>> groups;
+                    groups.emplace_back(start, end);
+                    for (size_t i = 1; i < match.size(); ++i) {
+                        // If group didn't participate, position() returns string::npos
+                        auto pos = match.position(i);
+                        if (pos == std::string::npos) {
+                            groups.emplace_back(std::string::npos, std::string::npos);
+                        } else {
+                            groups.emplace_back(pos, pos + match.length(i));
+                        }
+                    }
+                    return std::make_shared<std::vector<std::tuple<int64_t,int64_t>>>(groups);
+                } else {
+                    return  std::make_shared<std::vector<std::tuple<int64_t,int64_t>>>();
+                }
+            } catch (const std::regex_error&) {
+                throw std::runtime_error("unsupported regex pattern");
+            }
+        }
+
+    }
 }
+
+
 namespace std {
     template<typename... T>
     struct hash<std::tuple<T...>> {
