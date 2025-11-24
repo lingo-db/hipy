@@ -1,3 +1,4 @@
+import hipy.config
 from hipy.opt.pattern_rewriter import PatternRewriter,RewritePattern
 import hipy.ir as ir
 
@@ -78,7 +79,7 @@ class FuseArrayCompute(RewritePattern):
                     closure_val = rewriter.create(ir.MakeRecord, closure_type, closure_vals).result
                     global fused_cntr
                     fused_cntr += 1
-                    new_func = ir.Function(rewriter.module, f"fused_{fused_cntr}", func_types + [closure_type],
+                    new_func = ir.Function(rewriter.module, f"fused_{fused_cntr}{hipy.config.function_suffix}", func_types + [closure_type],
                                            func1.type.res_type)
                     arg_cntr = 0
                     args_for_op = []

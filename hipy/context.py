@@ -4,6 +4,7 @@ import sys
 
 import hipy
 from hipy import binding,global_const, mocked_modules
+import hipy.config
 from hipy.value import Value, VoidValue, PythonModule, ValueHolder, HLCClassValue, CValue, HLCFunctionValue, \
     HLCMethodValue, LambdaValue, Type, TypeValue, RawValue, ConstIterValue, RawModule, HLCGeneratorFunctionValue
 import hipy.ir as ir
@@ -891,10 +892,10 @@ class Context:
             read_only_input_ir_types = record_type(read_only_inputs)
             iter_val_ir_types = record_type(iter_vals)
 
-            func = ir.Function(self.module, f"loop_fn{self.loop_fn_counter}",
+            func = ir.Function(self.module, f"loop_fn{self.loop_fn_counter}{hipy.config.function_suffix}",
                                [read_only_input_ir_types, iter_val_ir_types],
                                record_type(iter_vals))
-            condfunc = ir.Function(self.module, f"while_cond_fn{self.loop_fn_counter}",
+            condfunc = ir.Function(self.module, f"while_cond_fn{self.loop_fn_counter}{hipy.config.function_suffix}",
                                [read_only_input_ir_types, iter_val_ir_types],
                                ir.bool)
             self.loop_fn_counter += 1
@@ -1055,7 +1056,7 @@ class Context:
             read_only_input_ir_types = record_type(read_only_inputs)
             iter_val_ir_types = record_type(iter_vals)
 
-            func = ir.Function(self.module, f"loop_fn{self.loop_fn_counter}",
+            func = ir.Function(self.module, f"loop_fn{self.loop_fn_counter}{hipy.config.function_suffix}",
                                [read_only_input_ir_types, iter_val_ir_types, iter_type.ir_type()],
                                record_type(iter_vals))
             self.loop_fn_counter += 1
@@ -1151,7 +1152,7 @@ class Context:
             except_closure_obj = binding.create_closure(except_closure, self)
             try_closure_type = try_closure_obj.value.__hipy_get_type__()
             try_explict_closure_arg = not isinstance(try_closure_type.ir_type(), ir.VoidType)
-            try_func = ir.Function(self.module, f"try_fn{try_counter}",
+            try_func = ir.Function(self.module, f"try_fn{try_counter}{hipy.config.function_suffix}",
                                    [try_closure_type.ir_type()] if try_explict_closure_arg else [], ir.void)
             with self.use_block(try_func.body):
                 closure_param = try_func.args[-1] if try_explict_closure_arg else ir.Constant(self.block, 0, ir.void).result
@@ -1163,7 +1164,7 @@ class Context:
                     try_early_return = (True, e.val)
             except_closure_type = except_closure_obj.value.__hipy_get_type__()
             except_explict_closure_arg = not isinstance(except_closure_type.ir_type(), ir.VoidType)
-            except_func = ir.Function(self.module, f"except_fn{try_counter}",
+            except_func = ir.Function(self.module, f"except_fn{try_counter}{hipy.config.function_suffix}",
                                       [except_closure_type.ir_type()] if except_explict_closure_arg else [], ir.void)
             with self.use_block(except_func.body):
                 closure_param = except_func.args[-1] if except_explict_closure_arg else ir.Constant(self.block, 0, ir.void).result

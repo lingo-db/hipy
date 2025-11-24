@@ -8,6 +8,7 @@ import textwrap
 import time
 
 from hipy import ir
+import hipy.config
 from hipy.function import HLCFunction
 from hipy.context import Context, ValueAlias, NestedValueAlias, ConvertedToPython, ValUsage
 
@@ -1236,7 +1237,7 @@ def stage_and_compile(func):
 def compile_function(hlc_function, arg_types, kw_types, module, fallback, debug):
     compiled_fn= hlc_function.get_compiled_fn()
     base_module=hlc_function.pyfunc.__module__
-    mangled_func_name = compiled_fn.__name__  # todo: mangle_func_name(fn_node.name, [arg_types[n] for n in arg_order]) + "_".join(arg_order)
+    mangled_func_name = compiled_fn.__name__+f"{hipy.config.function_suffix}"  # todo: mangle_func_name(fn_node.name, [arg_types[n] for n in arg_order]) + "_".join(arg_order)
     # todo: check if function already exists
     # todo: real function signature
     problematic = []

@@ -7,6 +7,7 @@ import hipy.compiler
 import hipy.mlirbackend
 import hipy.lib.builtins
 import hipy.ir as ir
+import hipy.config
 from hipy.value import SimpleType
 
 file = sys.argv[1] if len(sys.argv) > 1 else None
@@ -14,6 +15,10 @@ function = sys.argv[2] if len(sys.argv) > 2 else None
 
 arg_types_json = json.loads(sys.argv[3]) if len(sys.argv) > 3 else None
 
+function_suffix = sys.argv[4] if len(sys.argv) > 4 else None
+
+if function_suffix is not None:
+    hipy.config.function_suffix = "_"+function_suffix
 
 
 if file is None or function is None or arg_types_json is None:
@@ -59,8 +64,9 @@ func = getattr(mod, function)
 module = hipy.compiler.compile(func, arg_types=arg_types, fallback=False,
                                debug=False)
 mlir = hipy.mlirbackend.compile(module)
+
 # write mlir to output file if provided, otherwise print to stdout
-output_file = sys.argv[4] if len(sys.argv) > 4 else None
+output_file = sys.argv[5] if len(sys.argv) > 5 else None
 if output_file:
     with open(output_file, "w") as program_file:
         program_file.write(str(mlir))

@@ -1,5 +1,6 @@
 import functools
 
+import hipy.config
 from hipy.opt.pattern_rewriter import PatternRewriter, RewritePattern
 import hipy.ir as ir
 from collections import deque
@@ -162,7 +163,7 @@ class RewriteSetColumnRowApply(RewritePattern):
                         required_columns = [col for col, _ in table2.type.members]
                         closure_type = funcs.closure_type()
                         global fused_cntr
-                        new_func = ir.Function(rewriter.module, f"fused_{fused_cntr}",
+                        new_func = ir.Function(rewriter.module, f"fused_{fused_cntr}{hipy.config.function_suffix}",
                                                [t for _, t in table2.type.members] + (
                                                    [closure_type] if closure_type is not None else []),
                                                func.type.res_type)
@@ -191,7 +192,7 @@ class FuseColumnApply(RewritePattern):
                             return False
                         closure_type = funcs.closure_type()
                         global fused_cntr
-                        new_func = ir.Function(rewriter.module, f"fused_{fused_cntr}",
+                        new_func = ir.Function(rewriter.module, f"fused_{fused_cntr}{hipy.config.function_suffix}",
                                                [column2.type.element_type] + (
                                                    [closure_type] if closure_type is not None else []),
                                                func.type.res_type)
@@ -253,7 +254,7 @@ class RewriteFilter(RewritePattern):
                     required_cols[pos] = col
                 closure_type = funcs.closure_type()
                 global fused_cntr
-                new_func = ir.Function(rewriter.module, f"fused_filter_{fused_cntr}",
+                new_func = ir.Function(rewriter.module, f"fused_filter_{fused_cntr}{hipy.config.function_suffix}",
                                        func_types + ([closure_type] if closure_type is not None else []),
                                        ir.bool)
                 fused_cntr += 1

@@ -1,6 +1,7 @@
 import hipy
 import hipy.ir as ir
 from hipy import binding
+import hipy.config
 from hipy.value import ValueHolder, HLCClassValue, CValue, VoidValue, TypeValue, RawValue, MaterializedFunction, \
     LambdaValue, Value, Type, MaterializedConstantValue, HLCFunctionValue
 
@@ -194,7 +195,7 @@ def bind(fn, arg_types, _context):
                         closure=binding.create_closure(closure_dict,_context)
                         closure_type = closure.value.__hipy_get_type__()
                         explict_closure_arg = not isinstance(closure_type.ir_type(), ir.VoidType)
-                        func = ir.Function(_context.module, f"bound_fn{bound_ctr}",
+                        func = ir.Function(_context.module, f"bound_fn{bound_ctr}{hipy.config.function_suffix}",
                                            [t.ir_type() for t in arg_types] + ([closure_type.ir_type()] if explict_closure_arg else []), ir.void)
                         bound_ctr += 1
 
@@ -215,7 +216,7 @@ def bind(fn, arg_types, _context):
 
                     return bind_staged_fn(bind_fn)
                 case HLCFunctionValue(fn=hlc_fn):
-                    func = ir.Function(_context.module, f"bound_fn{bound_ctr}",
+                    func = ir.Function(_context.module, f"bound_fn{bound_ctr}{hipy.config.function_suffix}",
                                        [t.ir_type() for t in arg_types], ir.void)
                     bound_ctr += 1
 
@@ -232,7 +233,7 @@ def bind(fn, arg_types, _context):
                         ir.FunctionRef(_context.block, func).result,
                         _context.wrap(TypeValue(res_type))))
                 case lib.builtins.object():
-                    func = ir.Function(_context.module, f"bound_fn{bound_ctr}",
+                    func = ir.Function(_context.module, f"bound_fn{bound_ctr}{hipy.config.function_suffix}",
                                        [t.ir_type() for t in arg_types]+[ir.pyobj], ir.void)
                     bound_ctr += 1
                     with _context.use_block(func.body):
