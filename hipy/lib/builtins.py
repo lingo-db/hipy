@@ -1164,7 +1164,8 @@ class _concrete_list(list):
             res = self.value.items * multiplier.value.cval
             return _context.wrap(_concrete_list(res))
         else:
-            raise NotImplementedError()
+            return _context.perform_call(_context.get_attr(self.as_abstract(_context), "__mul__"),
+                                         [multiplier])
 
     def __hipy_get_type__(self):
         return list.ListType(self._element_type)
