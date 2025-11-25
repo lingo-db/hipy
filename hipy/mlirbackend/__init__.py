@@ -4,7 +4,7 @@ import subprocess
 import sys
 
 from lingodbbridge.mlir import ir as mlir
-from lingodbbridge.mlir.dialects import func, arith, scf, util, tuples, db, relalg, subop, builtin
+from lingodbbridge.mlir.dialects import func, arith, scf, util, tuples, db, relalg, subop, builtin, py_interp
 import lingodbbridge.mlir._mlir_libs.mlir_init as mlir_init
 import lingodbbridge.mlir.extras.types as mlirtypes
 import lingodbbridge
@@ -49,6 +49,8 @@ def to_mlir_type(t):
             return db.DictType.get(to_mlir_type(key_type), to_mlir_type(val_type))
         case ir.VoidType():
             return mlirtypes.IntegerType.get_signless(1)  # MLIR does not have a void type, so we use a dummy type
+        case ir.PyObjType():
+            return py_interp.PyObject.get(curr_context)
         case _:
             assert False
     print(t)
@@ -227,7 +229,10 @@ def to_mlir_stmt(stmt, mapping):
                     mapping[r] = arith.SIToFPOp(to_mlir_type(r.type), mapping[args[0]]).result
                 case "scalar.float.from_string", [ir.StringType()]:
                     mapping[r] = db.CastOp(to_mlir_type(r.type), mapping[args[0]]).result
-
+                case "scalar.string.to_python", [ir.StringType()]:
+                    mapping[r] = py_interp.CastToPyObject(to_mlir_type(r.type), mapping[args[0]]).result
+                case "scalar.int.to_python", [ir.IntType()]:
+                    mapping[r] = py_interp.CastToPyObject(to_mlir_type(r.type), mapping[args[0]]).result
                 case "scalar.string.compare.eq", [ir.StringType(), ir.StringType()]:
                     mapping[r] = db.CmpOp(db.DBCmpPredicate.eq, mapping[args[0]], mapping[args[1]]).result
                 case "scalar.string.compare.lt", [ir.StringType(), ir.StringType()]:
@@ -507,6 +512,15 @@ def to_mlir_stmt(stmt, mapping):
                     mapping[r] = util.GetTupleOp(to_mlir_type(r.type), mapping[record], index_attr).result
                 case _:
                     assert False, f"Expected record type, got {record.type}"
+        case ir.PyGetAttr(result=r, on=obj, name=attribute):
+            mapping[r] = py_interp.GetAttr(to_mlir_type(r.type), mapping[obj], str_attr(attribute)).result
+        case ir.PythonCall(result=r, callable=callable, args=args, kw_args=kw_args):
+            if len(kw_args) == 0:
+                mapping[r] = py_interp.Call(to_mlir_type(r.type), mapping[callable],
+                                            [mapping[arg] for arg in args], mlir.ArrayAttr.get([])).result
+            else:
+                assert False
+
         case _:
             print(stmt)
             assert False

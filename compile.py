@@ -17,6 +17,8 @@ arg_types_json = json.loads(sys.argv[3]) if len(sys.argv) > 3 else None
 
 function_suffix = sys.argv[4] if len(sys.argv) > 4 else None
 
+fallback_allowed = sys.argv[5]=='fallback' if len(sys.argv) > 5 else True
+
 if function_suffix is not None:
     hipy.config.function_suffix = "_"+function_suffix
 
@@ -61,12 +63,12 @@ def load_module_from_file(module_name: str, file_path: str):
 mod = load_module_from_file("udf_module", file)
 func = getattr(mod, function)
 
-module = hipy.compiler.compile(func, arg_types=arg_types, fallback=False,
+module = hipy.compiler.compile(func, arg_types=arg_types, fallback=fallback_allowed,
                                debug=False)
 mlir = hipy.mlirbackend.compile(module)
 
 # write mlir to output file if provided, otherwise print to stdout
-output_file = sys.argv[5] if len(sys.argv) > 5 else None
+output_file = sys.argv[6] if len(sys.argv) > 6 else None
 if output_file:
     with open(output_file, "w") as program_file:
         program_file.write(str(mlir))
