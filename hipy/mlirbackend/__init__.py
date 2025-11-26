@@ -455,6 +455,13 @@ def to_mlir_stmt(stmt, mapping):
 
                     mapping[r] = db.TryExcept(to_mlir_type(r.type), try_fn, except_fn, try_arg=try_arg,
                                               except_arg=except_arg).result
+                case "scalar.string.strip", [ir.StringType()]:
+                    mapping[r] = db.RuntimeCall(db.StringType.get(curr_context), str_attr("StringStrip"),
+                                                [mapping[args[0]]]).result
+                case "scalar.float.mod", [ir.FloatType(), ir.FloatType()]:
+                    mapping[r] = arith.RemFOp(mapping[args[0]], mapping[args[1]]).result
+                case "scalar.float.to_python", [ir.FloatType()]:
+                    mapping[r] = py_interp.CastToPyObject(to_mlir_type(r.type), mapping[args[0]]).result
                 case _:
                     print("Can not translate op", name, "for types", arg_types, file=sys.stderr)
                     assert False

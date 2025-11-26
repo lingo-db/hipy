@@ -563,6 +563,9 @@ class float(Value):
     def __pow__(self, other):
         return self._float_op("pow", other)
 
+    @hipy.compiled_function
+    def __bool__(self):
+        return self != 0.0
     @staticmethod
     def __merge__(self, other, self_fn, other_fn, context):
         if isinstance(other.value, float):
