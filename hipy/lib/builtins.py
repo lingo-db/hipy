@@ -869,6 +869,383 @@ class _const_str(CValue, str):
         return str(ir.Constant(_context.block, self.cval, ir.string).result)
 
 
+
+    @staticmethod
+    def translate_python_spec_to_cpp(py: str) -> str:
+        """
+        Translate a single Python 'format_spec' into a C++20 std::format specifier.
+        Very incomplete; handles only the easy direct mappings.
+        """
+        import re
+
+        # Empty spec → empty C++ spec
+        if py == "":
+            return ""
+
+        # Regex for the common subset:
+        #
+        # fill? align? sign? alt? zero? width? precision? type?
+        #
+        # We keep this deliberately conservative.
+        spec_re = re.compile(
+            r"""
+            (?:(?P<fill>.)?(?P<align>[<>=^]))?
+            (?P<sign>[+\- ])?
+            (?P<alt>\#)?
+            (?P<zero>0)?
+            (?P<width>\d+)?
+            (?:\.(?P<prec>\d+))?
+            (?P<type>[bcdeEfFgGnosxX%])?
+            """,
+            re.VERBOSE
+        )
+
+        m = spec_re.fullmatch(py)
+        if not m:
+            raise NotImplementedError(f"Cannot parse Python format spec: {py}")
+
+        gd = m.groupdict()
+
+        fill = gd["fill"]
+        align = gd["align"]
+        sign = gd["sign"]
+        alt = gd["alt"]
+        zero = gd["zero"]
+        width = gd["width"]
+        prec = gd["prec"]
+        typ = gd["type"]
+
+        # Unsupported types / differences:
+        if typ == "n":  # locale-aware number formatting has no C++ equivalent
+            raise NotImplementedError("Python 'n' format has no C++ equivalent.")
+
+        if align == "=":
+            raise NotImplementedError("Python sign-aware alignment '=' not supported in C++20.")
+
+        # Build a minimal C++ format string:
+        out = "{:"
+
+        # fill+align
+        if align:
+            if fill:
+                out += fill + align
+            else:
+                out += align
+
+        # sign
+        if sign:
+            out += sign
+
+        # alt (#)
+        if alt:
+            out += "#"
+
+        # zero
+        if zero and width:
+            # In both Python & C++ zero works the same
+            out += "0"
+
+        # width
+        if width:
+            out += width
+
+        # precision
+        if prec:
+            out += "." + prec
+
+        # type
+        if typ:
+            out += typ
+
+        out += "}"
+
+        return out
+    @hipy.raw
+    def __get_format_parts(self, _context):
+        import re
+
+        class FormatParseError(Exception):
+            pass
+
+        def parse_and_translate_format(fmt: str):
+            """
+            Parse a Python format string `fmt` into:
+              - literals: list of n+1 literal strings
+              - specs:    list of n raw specifiers (without braces)
+              - cpp_specs: list of n translated C++20 specifiers
+
+            Restrictions:
+              * Field names are NOT allowed; if present → NotImplementedError.
+              * Only a limited subset of Python specs is translated:
+                    fill/align, width, precision, integer bases, float formats.
+              * Anything outside this subset → NotImplementedError.
+            """
+
+            # Step 1: separate literals and specifiers using regex
+            token_re = re.compile(r"{([^}]*)}")
+            pos = 0
+            literals = []
+            specs = []
+
+            for m in token_re.finditer(fmt):
+                start, end = m.span()
+                # literal before spec
+                literals.append(fmt[pos:start])
+                spec = m.group(1)
+                specs.append(spec)
+                pos = end
+
+            # tail literal
+            literals.append(fmt[pos:])
+
+            # Step 2: validate + translate specifiers
+            cpp_specs = []
+
+            for spec in specs:
+                # Python format field syntax may be:
+                #   field_name[!conversion][:format_spec]
+                # We do *not* handle field names → must be empty or begin with ':'
+                if "!" in spec:
+                    raise NotImplementedError("Conversion flags (!r, !s, ...) not supported.")
+
+                # Split field name from format spec
+                if ":" in spec:
+                    field_name, fmt_spec = spec.split(":", 1)
+                else:
+                    field_name, fmt_spec = spec, ""
+
+                if field_name.strip():
+                    raise NotImplementedError("Field names are not supported.")
+
+                # fmt_spec now contains Python's format-spec language.
+                cpp_specs.append(_const_str.translate_python_spec_to_cpp(fmt_spec))
+
+            return literals, specs, cpp_specs
+
+
+
+        const_str = self.value.cval
+
+        literals, specs, cpp_specs = parse_and_translate_format(const_str)
+        return _context.create_tuple([_context.create_list([_context.constant(s) for s in literals]),
+                                        _context.create_list([_context.constant(s) for s in cpp_specs])])
+    @hipy.raw
+    def __get_percentage_format_parts(self, _context):
+        from typing import List, Tuple
+
+        def decompose_percent_format(fmt: str) -> Tuple[List[str], List[str]]:
+            """
+            Decompose an old-style '%' format string.
+
+            Returns:
+                literals, specs
+
+                - literals: list of n+1 literal chunks (with '%%' unescaped to '%')
+                - specs:    list of n normalised specs, each in Python .format
+                            mini-language form so that `translate_python_spec_to_cpp`
+                            can be reused.
+
+            Raises:
+                NotImplementedError:
+                    - mapping keys:           '%(name)d'
+                    - dynamic width/precision: '%*d', '%. *f'
+                    - integer precision:      '%.3d', '%.4x', etc.
+                    - length modifiers:       '%ld', '%hd', '%Lf'
+                    - unsupported types:      '%r', '%', or anything not in
+                                              'diouxXeEfFgGcrs%'
+                ValueError:
+                    - for incomplete trailing '%' specs.
+            """
+            literals: List[str] = []
+            specs: List[str] = []
+
+            i = 0
+            n = len(fmt)
+            last_literal_start = 0
+
+            while i < n:
+                if fmt[i] != '%':
+                    i += 1
+                    continue
+
+                # Handle escaped %%
+                if i + 1 < n and fmt[i + 1] == '%':
+                    # It's part of the literal; we just skip over it and
+                    # unescape later via .replace('%%', '%').
+                    i += 2
+                    continue
+
+                # We hit a real '%' specifier.
+                # Flush literal before it (unescaping %% -> %)
+                literals.append(fmt[last_literal_start:i].replace('%%', '%'))
+                i += 1  # skip '%'
+
+                # Mapping keys like %(name)d are not supported
+                if i < n and fmt[i] == '(':
+                    raise NotImplementedError("Mapping keys like %(name)s are not supported")
+
+                # ----- Parse flags -----
+                flags_chars = '#0- +'
+                flags = ''
+                while i < n and fmt[i] in flags_chars:
+                    flags += fmt[i]
+                    i += 1
+
+                # ----- Parse width -----
+                # We do NOT support '*' (dynamic width); be conservative.
+                width = ''
+                if i < n and fmt[i] == '*':
+                    raise NotImplementedError("Dynamic width ('*') is not supported")
+                while i < n and fmt[i].isdigit():
+                    width += fmt[i]
+                    i += 1
+
+                # ----- Parse precision -----
+                precision = ''
+                if i < n and fmt[i] == '.':
+                    i += 1
+                    if i < n and fmt[i] == '*':
+                        raise NotImplementedError("Dynamic precision ('*') is not supported")
+                    while i < n and fmt[i].isdigit():
+                        precision += fmt[i]
+                        i += 1
+
+                # ----- Parse length modifiers -----
+                # Be conservative: any occurrence of C length modifiers is rejected.
+                length_mods = 'hlL'
+                if i < n and fmt[i] in length_mods:
+                    raise NotImplementedError("C length modifiers (h, l, L) are not supported")
+
+                # ----- Type character -----
+                if i >= n:
+                    raise ValueError("Incomplete '%' format specifier at end of string")
+
+                type_char = fmt[i]
+                i += 1
+
+                # Check allowed types in old-style %
+                allowed_types = set("diouxXeEfFgGcrs%")
+                if type_char not in allowed_types:
+                    raise NotImplementedError(f"Unsupported '%' format type {type_char!r}")
+
+                # Types we explicitly do NOT support translating
+                if type_char in ('r', '%'):
+                    # %r uses repr() (no direct format-equivalent),
+                    # % type is special (prints a literal % with formatting)
+                    raise NotImplementedError(f"Unsupported '%' format type {type_char!r}")
+
+                # Normalise some legacy integer types to 'd'
+                if type_char in ('i', 'u'):
+                    type_char = 'd'
+
+                # If this is an integer-like type and precision is specified,
+                # we cannot faithfully represent that in the .format mini-language
+                # ('.3d' is invalid there).
+                int_types = set('doxX')
+                if type_char in int_types and precision:
+                    raise NotImplementedError(
+                        f"Integer precision like '%.{precision}{type_char}' "
+                        "cannot be mapped safely to .format()"
+                    )
+
+                # ----- Convert flags to .format-style mini-language -----
+                # We construct: [fill][align][sign][#][0][width][.precision][type]
+                align = ''
+                sign = ''
+                alt = False
+                zero = False
+
+                for f in flags:
+                    if f == '-':
+                        align = '<'  # left-align
+                    elif f == '+':
+                        sign = '+'
+                    elif f == ' ' and not sign:
+                        sign = ' '  # space sign, only if '+' not present
+                    elif f == '#':
+                        alt = True
+                    elif f == '0':
+                        zero = True
+
+                # Left alignment overrides zero-padding
+                if align == '<':
+                    zero = False
+
+                spec_parts: List[str] = []
+
+                # [fill][align] – we only use default blank fill, so just put align
+                if align:
+                    spec_parts.append(align)
+
+                # [sign]
+                if sign:
+                    spec_parts.append(sign)
+
+                # [#]
+                if alt:
+                    spec_parts.append('#')
+
+                # [0]
+                if zero:
+                    spec_parts.append('0')
+
+                # [width]
+                if width:
+                    spec_parts.append(width)
+
+                # [.precision]
+                # For float and string types, precision is supported in .format.
+                if precision:
+                    float_types = set('eEfFgG')
+                    if type_char in float_types or type_char == 's':
+                        spec_parts.append('.' + precision)
+                    else:
+                        # Should be unreachable because we blocked int+precision above,
+                        # but keep this as a safety net.
+                        raise NotImplementedError(
+                            f"Precision not supported for type {type_char!r} in .format()"
+                        )
+
+                # [type]
+                spec_parts.append(type_char)
+
+                specs.append(''.join(spec_parts))
+
+                # Next literal starts after this spec
+                last_literal_start = i
+
+            # Trailing literal (after last spec), unescaping %%
+            literals.append(fmt[last_literal_start:].replace('%%', '%'))
+
+            return literals, specs
+        const_str = self.value.cval
+        literals, specs = decompose_percent_format(const_str)
+        cpp_specs = [_const_str.translate_python_spec_to_cpp(spec) for spec in specs]
+        return _context.create_tuple([_context.create_list([_context.constant(s) for s in literals]),
+                                        _context.create_list([_context.constant(s) for s in cpp_specs])])
+
+
+    @hipy.compiled_function
+    def format(self, *args):
+        literals, cpp_specs = self._const_str__get_format_parts()
+        len = cpp_specs.__len__()
+        res = literals[0]
+        for i in range(len):
+            res += intrinsics.call_builtin("scalar.string.format_single", str, [cpp_specs[i], args[i]])
+            res += literals[i + 1]
+        return res
+
+    @hipy.compiled_function
+    def __mod__(self, *args):
+        literals, cpp_specs = self._const_str__get_percentage_format_parts()
+        len = cpp_specs.__len__()
+        res = literals[0]
+        for i in range(len):
+            res += intrinsics.call_builtin("scalar.string.format_single", str, [cpp_specs[i], args[i]])
+            res += literals[i + 1]
+        return res
+
+
 @hipy.classdef
 class list(Value):
     def __init__(self, value, element_type):

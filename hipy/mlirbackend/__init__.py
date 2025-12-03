@@ -462,6 +462,12 @@ def to_mlir_stmt(stmt, mapping):
                     mapping[r] = arith.RemFOp(mapping[args[0]], mapping[args[1]]).result
                 case "scalar.float.to_python", [ir.FloatType()]:
                     mapping[r] = py_interp.CastToPyObject(to_mlir_type(r.type), mapping[args[0]]).result
+                case "scalar.string.format_single", [ir.StringType(), ir.FloatType()]:
+                    mapping[r] = db.RuntimeCall(db.StringType.get(curr_context), str_attr("FmtDouble"),
+                                                [mapping[args[0]], mapping[args[1]]]).result
+                case "scalar.string.format_single", [ir.StringType(), ir.IntType()]:
+                    mapping[r] = db.RuntimeCall(db.StringType.get(curr_context), str_attr("FmtInt"),
+                                                [mapping[args[0]], mapping[args[1]]]).result
                 case _:
                     print("Can not translate op", name, "for types", arg_types, file=sys.stderr)
                     assert False
