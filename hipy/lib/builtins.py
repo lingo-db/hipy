@@ -278,6 +278,8 @@ class int(Value):
             right = self if reverse else other
             # todo: other width?
             return intrinsics.call_builtin("scalar.int." + op, int, [left, right])
+        elif intrinsics.isa(other, bool):
+            return self._int_op(op, int(other), reverse)
         else:
             intrinsics.not_implemented()
 
@@ -311,6 +313,20 @@ class int(Value):
     @hipy.compiled_function
     def __rmul__(self, other):
         return self._int_op("mul", other, reverse=True)
+
+    @hipy.compiled_function
+    def __lshift__(self, other):
+        return self._int_op("lshift", other)
+
+    @hipy.compiled_function
+    def __neg__ (self):
+        return 0 - self
+    @hipy.compiled_function
+    def __invert__(self):
+        return self._int_op("xor", -1)
+    @hipy.compiled_function
+    def __and__(self, other):
+        return self._int_op("and", other)
 
     @hipy.compiled_function
     def __eq__(self, other):
@@ -381,6 +397,10 @@ class int(Value):
     @hipy.compiled_function
     def __imod__(self, other):
         return self % other
+
+    @hipy.compiled_function
+    def __iand__(self, other):
+        return self & other
 
     @staticmethod
     def __merge__(self, other, self_fn, other_fn, context):
@@ -780,12 +800,16 @@ class str(Value):
             if not first:
                 res = res + self
             first = False
-            res = res + v
+            res = res + v #todo: if python: "cast to str"
         return res
 
     @hipy.compiled_function
     def __hipy__repr__(self):
         return "'" + self + "'"
+
+    @hipy.compiled_function
+    def __format__(self, fmt):
+        return self
 
     @hipy.compiled_function
     def __len__(self):
@@ -1477,6 +1501,18 @@ class list(Value):
             if i == item:
                 found = True
         return found
+
+    @hipy.compiled_function
+    def index(self, item):
+        ret = -1
+        for i in range(len(self)):
+            if self[i] == item:
+                ret = i
+                break
+        if ret != -1:
+            return ret
+        intrinsics.call_builtin("error", None, ["ValueError: "+str(item)+" not in list"])
+        return ret
 
 
 def _common_type(types):
@@ -2356,6 +2392,16 @@ def abs(x):
         return x if x >= 0.0 else -x
     else:
         intrinsics.not_implemented()
+
+@hipy.raw
+def _format_internal(value, formatspec, _context=None):
+    with _context.no_fallback():
+        return _context.perform_call(_context.get_attr(value, "__format__"),[formatspec])
+
+@hipy.compiled_function
+def format(value, formatspec=""):
+    return _format_internal(value, formatspec)
+
 
 
 @hipy.classdef

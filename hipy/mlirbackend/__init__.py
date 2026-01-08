@@ -460,8 +460,25 @@ def to_mlir_stmt(stmt, mapping):
                                                 [mapping[args[0]]]).result
                 case "scalar.float.mod", [ir.FloatType(), ir.FloatType()]:
                     mapping[r] = arith.RemFOp(mapping[args[0]], mapping[args[1]]).result
+                case "scalar.float.exp", [ir.FloatType()]:
+                    mapping[r] = db.RuntimeCall(to_mlir_type(r.type), str_attr("Exp"),
+                                                [mapping[args[0]]]).result
+                case "scalar.float.log", [ir.FloatType()]:
+                    mapping[r] = db.RuntimeCall(to_mlir_type(r.type), str_attr("Log"),
+                                                [mapping[args[0]]]).result
+                case "scalar.float.sqrt", [ir.FloatType()]:
+                    mapping[r] = db.RuntimeCall(to_mlir_type(r.type), str_attr("Sqrt"),
+                                                [mapping[args[0]]]).result
+                case "scalar.float.sin", [ir.FloatType()]:
+                    mapping[r] = db.RuntimeCall(to_mlir_type(r.type), str_attr("Sin"),
+                                                [mapping[args[0]]]).result
+                case "scalar.float.cos", [ir.FloatType()]:
+                    mapping[r] = db.RuntimeCall(to_mlir_type(r.type), str_attr("Cos"),
+                                                [mapping[args[0]]]).result
                 case "scalar.float.to_python", [ir.FloatType()]:
                     mapping[r] = py_interp.CastToPyObject(to_mlir_type(r.type), mapping[args[0]]).result
+                case "scalar.float.to_string", [ir.FloatType()]:
+                    mapping[r] = db.CastOp(to_mlir_type(r.type), mapping[args[0]]).result
                 case "scalar.string.format_single", [ir.StringType(), ir.FloatType()]:
                     mapping[r] = db.RuntimeCall(db.StringType.get(curr_context), str_attr("FmtDouble"),
                                                 [mapping[args[0]], mapping[args[1]]]).result

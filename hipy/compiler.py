@@ -477,6 +477,34 @@ def stage_expr(expr, context: StageContext):
                 "staged": ast.Name(id=lambda_funcname, ctx=ast.Load(), lineno=lineno, col_offset=col_offset),
                 "bind_python": bind_python_lambda,
                 "bind_staged": bind_staged_lambda}, lineno, col_offset, context)
+        case ast.JoinedStr(values=values, lineno=lineno, col_offset=col_offset):
+            formatted_values = []
+            for v in values:
+                match v:
+                    case ast.Constant():
+                        formatted_values.append(v)
+                    case ast.FormattedValue(value=value, conversion=-1, format_spec=None, lineno=lineno, col_offset=col_offset):
+                        # value => format(value)
+                        format_call_expr = ast.Call(
+                            func=ast.Name(id='format', ctx=ast.Load(), lineno=lineno, col_offset=col_offset),
+                            args=[value],
+                            keywords=[],
+                            lineno=lineno,
+                            col_offset=col_offset)
+                        formatted_values.append(format_call_expr)
+                    case _:
+                        raise NotImplementedError()
+                # create list from formatted values
+            list_expr = ast.List(elts=formatted_values, ctx=ast.Load(), lineno=lineno, col_offset=col_offset)
+            # create "".join(list) as ast
+            join_call_expr = ast.Call(
+                func=ast.Attribute(value=ast.Constant(value="", lineno=lineno, col_offset=col_offset),
+                                   attr="join", ctx=ast.Load(), lineno=lineno, col_offset=col_offset),
+                args=[list_expr],
+                keywords=[],
+                lineno=lineno,
+                col_offset=col_offset)
+            return stage_expr(join_call_expr, context)
         case _:
             print("unhandled expr", type(expr))
             raise NotImplementedError()
@@ -1050,10 +1078,10 @@ def rewrite_continue_in_loop_body(body):
     res_body = []
     for stmt in reversed(body):
         match stmt:
-            case ast.If(test=test, body=ifBody, orelse=[], lineno=lineno, col_offset=col_offset):
+            case ast.If(test=test, body=ifBody, orelse=elseBody, lineno=lineno, col_offset=col_offset):
                 if isinstance(ifBody[-1], ast.Continue):
                     res_body = [
-                        ast.If(test=test, body=ifBody[:-1], orelse=res_body, lineno=lineno, col_offset=col_offset)]
+                        ast.If(test=test, body=ifBody[:-1], orelse=elseBody+res_body, lineno=lineno, col_offset=col_offset)]
                 else:
                     res_body = [stmt] + res_body
             case _:
@@ -1114,6 +1142,34 @@ def rewrite_loop_break(body):
                                lineno=node.lineno, col_offset=node.col_offset),
                     ast.For(target=node.target, iter=node.iter, body=[encapsulated], orelse=node.orelse,
                             lineno=node.lineno, col_offset=node.col_offset)
+                ]
+            else:
+                return node
+        def visit_While(self, node):
+            rewriter = RewriteBreakInLoop()
+            new_body = []
+            for stmt in node.body:
+                rewritten = rewriter.visit(stmt)
+                match rewritten:
+                    case list():
+                        new_body += rewritten
+                    case None:
+                        pass
+                    case _:
+                        new_body.append(rewritten)
+
+            if rewriter.rewrote:
+                new_body = rewrite_continue_in_loop_body(new_body)
+                encapsulated = ast.If(test=ast.Name(id=rewriter.variable_name, ctx=ast.Load(), lineno=node.lineno,
+                                                    col_offset=node.col_offset), body=new_body, orelse=[],
+                                      lineno=node.lineno, col_offset=node.col_offset)
+                return [
+                    ast.Assign(targets=[ast.Name(id=rewriter.variable_name, ctx=ast.Store(), lineno=node.lineno,
+                                                 col_offset=node.col_offset)],
+                               value=ast.Constant(value=True, lineno=node.lineno, col_offset=node.col_offset),
+                               lineno=node.lineno, col_offset=node.col_offset),
+                    ast.While(test=node.test, body=[encapsulated], orelse=node.orelse,
+                              lineno=node.lineno, col_offset=node.col_offset)
                 ]
             else:
                 return node

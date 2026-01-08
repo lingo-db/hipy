@@ -16,3 +16,23 @@ def fact(l):
 @hipy.compiled_function
 def ceil(x):
     return intrinsics.call_builtin("scalar.float.ceil",int,  [x])
+
+@hipy.compiled_function
+def exp(x):
+    return intrinsics.call_builtin("scalar.float.exp",float,  [x])
+
+@hipy.compiled_function
+def sqrt(x):
+    return intrinsics.call_builtin("scalar.float.sqrt",float,  [x])
+
+@hipy.compiled_function
+def log(x):
+    return intrinsics.call_builtin("scalar.float.log",float,  [x])
+
+@hipy.compiled_function
+def sin(x):
+    return intrinsics.call_builtin("scalar.float.sin",float,  [x])
+
+@hipy.compiled_function
+def cos(x):
+    return intrinsics.call_builtin("scalar.float.cos",float,  [x])
