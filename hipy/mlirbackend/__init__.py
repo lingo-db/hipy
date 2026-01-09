@@ -498,6 +498,8 @@ def to_mlir_stmt(stmt, mapping):
             else:
                 c = func.CallOp([to_mlir_type(r.type)], callee, mlir_args)
             mapping[r] = c.result
+        case ir.CallIndirect(result=r, fnref=callee, args=args):
+            mapping[r] = call(callee, [mapping[arg] for arg in args], mapping)
         case ir.IfElse(cond=cond, ifBody=ifBody, elseBody=elseBody, return_types=return_types):
             if_stmt = stmt
             if_op = scf.IfOp(mapping[cond], [to_mlir_type(t) for t in return_types], hasElse=True)

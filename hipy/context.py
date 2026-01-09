@@ -6,7 +6,8 @@ import hipy
 from hipy import binding,global_const, mocked_modules
 import hipy.config
 from hipy.value import Value, VoidValue, PythonModule, ValueHolder, HLCClassValue, CValue, HLCFunctionValue, \
-    HLCMethodValue, LambdaValue, Type, TypeValue, RawValue, ConstIterValue, RawModule, HLCGeneratorFunctionValue
+    HLCMethodValue, LambdaValue, Type, TypeValue, RawValue, ConstIterValue, RawModule, HLCGeneratorFunctionValue, \
+    GeneratorExpressionValue
 import hipy.ir as ir
 import hipy.lib as lib
 from hipy.function import HLCFunction, HLCMethod, GeneratorFunction
@@ -1105,6 +1106,35 @@ class Context:
                 for i, o in enumerate(iter_vals)]
             return tuple(res_vals)
         # print(res_vals)
+
+    def generator_expr(self, iter_fn, iterable,type_infer_fn, _action_id):
+        with self.handle_action(_action_id):
+            return self.wrap(GeneratorExpressionValue(HLCFunction(iter_fn,iter_fn), iterable, type_infer_fn))
+
+    def infer_return_type(self, fn, arg_types_input, _action_id=None):
+        from hipy.lib.builtins import _concrete_list
+        arg_types = []
+        match arg_types_input:
+            case ValueHolder(value=_concrete_list(items=arg_types_)):
+                for a in arg_types_:
+                    match a.value:
+                        case TypeValue(type=t):
+                            arg_types.append(t)
+                        case HLCClassValue(cls=cls):
+                            arg_types.append(cls.__hipy_create_type__())
+                        case _:
+                            raise RuntimeError(f"Invalid argument for bind: {fn}, {arg_types}")
+            case _:
+                raise RuntimeError(f"Invalid argument for infer_return_type: {fn}, {arg_types_input}")
+        with self.transaction() as tx:
+            fake_args = [self.wrap(t.construct(ir.SSAValue(t.ir_type(), None), self)) for t in arg_types]
+
+            # print(iter_type)
+            res_val = fn(*fake_args, _context=self)
+            res_val_type = res_val.value.__hipy_get_type__()
+        tx.abort()
+        return self.wrap(TypeValue(res_val_type))
+
 
     def create_lambda(self, staged, bind_python, bind_staged, _action_id):
         with self.handle_action(_action_id):

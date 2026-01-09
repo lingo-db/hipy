@@ -119,6 +119,10 @@ class RawValue(Value):
         raise RuntimeError("Cannot convert raw value to python")
 
     def __merge__(self, other, self_fn, other_fn, context):
+        if isinstance(other.value, RawValue):
+            if other.value.__value__.type != self.value.__value__.type:
+                raise RuntimeError("Cannot merge raw values of different types")
+            return self, other, lambda val: RawValue(val)
         raise RuntimeError("Cannot merge raw values")
 
     class RawValueType(Type):
@@ -742,6 +746,50 @@ class LambdaValue(Value):
 
     def __hipy_get_type__(self):
         return _NotRelevantType()
+
+@hipy.decorators.classdef
+class GeneratorExpressionValue(Value):
+    def __init__(self, iter_fn, iterable, type_infer_fn):
+        self.iter_fn = iter_fn
+        self.iterable = iterable
+        self.type_infer_fn = type_infer_fn
+        super().__init__(None)
+
+    def __hipy_create_type__(self, *args):
+        return _NotRelevantType()
+
+    def __hipy_get_type__(self):
+        return _NotRelevantType()
+    @hipy.compiled_function
+    def _get_iterable_iter_type(self):
+        return self.iterable.__iter__().__itertype__()
+
+    @hipy.raw
+    def _import_intrinsics_call_function(self, _context):
+        from hipy.intrinsics import call_indirect
+        return _context.get_by_name(call_indirect, "call_indirect")
+
+    @hipy.raw
+    def _import_intrinsics_typeof(self, _context):
+        from hipy.intrinsics import typeof
+        return _context.get_by_name(typeof, "typeof")
+    @hipy.compiled_function
+    def __iterate__(self, loopfn, x, iter_vals):
+        return self.iter_fn(self.iterable, loopfn, x, iter_vals)
+
+    def __track__(self, iter_value, context):
+        pass
+    @hipy.raw
+    def __itertype__(self, _context):
+        return _context.infer_return_type(self.value.type_infer_fn, _context.create_list([ _context.perform_call(_context.get_attr(self, "_get_iterable_iter_type"), [])]))
+    @hipy.raw
+    def __topython__(self, _context):
+        raise NotImplementedError()
+    @hipy.compiled_function
+    def __iter__(self):
+        return self
+
+
 
 
 class _static_object:

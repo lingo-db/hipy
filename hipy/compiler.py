@@ -11,6 +11,7 @@ from hipy import ir
 import hipy.config
 from hipy.function import HLCFunction
 from hipy.context import Context, ValueAlias, NestedValueAlias, ConvertedToPython, ValUsage
+import hipy.intrinsics as intrinsics
 
 import networkx as nx
 
@@ -192,6 +193,56 @@ def stage_expr(expr, context: StageContext):
                                       {"val": list_val,
                                        "name": ast.Constant(list_var, lineno=lineno, col_offset=col_offset)},
                                       lineno, col_offset, context)
+        case ast.GeneratorExp(elt=elt,
+                              generators=[ast.comprehension(target=ast.Name(id=targetname), iter=iter, ifs=ifs)],
+                              lineno=lineno, col_offset=col_offset):
+            read_only_var = get_tmp_name()
+            iter_vals_var = get_tmp_name()
+            callback_fn_var = get_tmp_name()
+            iterable_var = get_tmp_name()
+            def wrap_ifs(ifs, expr):
+                if len(ifs) == 0:
+                    return ast.Assign(
+                        targets=[ast.Name(iter_vals_var, ctx=ast.Store(), lineno=lineno, col_offset=col_offset)],
+                        value=expr, lineno=lineno, col_offset=col_offset)
+                else:
+                    return ast.If(test=ifs[0], body=[wrap_ifs(ifs[1:], expr)], orelse=[], lineno=lineno,
+                                  col_offset=col_offset)
+
+            forStmt = ast.For(target=ast.Name(targetname, ctx=ast.Store(), lineno=lineno, col_offset=col_offset),
+                              iter=ast.Name(iterable_var, ctx=ast.Load(), lineno=lineno, col_offset=col_offset),
+                              body=[wrap_ifs(ifs, ast.Call(
+                                  func=ast.Attribute(ast.Name("__intrinsics__", lineno=lineno,
+                                                              col_offset=col_offset, ctx=ast.Load()),
+                                                     attr="call_indirect", lineno=lineno, col_offset=col_offset,
+                                                     ctx=ast.Load()),
+                                  args=[ast.Name(callback_fn_var, lineno=lineno, col_offset=col_offset, ctx=ast.Load()),
+                                        ast.List(elts=[
+                                            ast.Name(read_only_var, lineno=lineno, col_offset=col_offset, ctx=ast.Load()),
+                                            ast.Name(iter_vals_var, lineno=lineno, col_offset=col_offset, ctx=ast.Load()),
+                                            elt
+                                        ], lineno=lineno, col_offset=col_offset, ctx=ast.Load()),
+                                        ast.Call(func=ast.Attribute(ast.Name("__intrinsics__", lineno=lineno,
+                                                              col_offset=col_offset, ctx=ast.Load()),
+                                                     attr="typeof", lineno=lineno, col_offset=col_offset,
+                                                     ctx=ast.Load()),
+                                                 args=[ast.Name(iter_vals_var, lineno=lineno, col_offset=col_offset, ctx=ast.Load())],
+                                                 keywords=[], lineno =lineno, col_offset=col_offset
+                                                 )
+                                        ], keywords=[], lineno=lineno, col_offset=col_offset))], orelse=[],
+                              lineno=lineno, col_offset=col_offset)
+
+            iter_fn = plain_function([forStmt, ast.Return(
+                value=ast.Name(iter_vals_var, lineno=lineno, col_offset=col_offset, ctx=ast.Load()), lineno=lineno,
+                col_offset=col_offset)], [iterable_var, callback_fn_var, read_only_var, iter_vals_var], context, lineno, col_offset)
+            type_infer_fn = plain_function([ast.Return(value=elt, lineno=lineno, col_offset=col_offset)], [targetname],
+                                           context, lineno, col_offset)
+            return stage_context_call("generator_expr", {
+                "iter_fn": iter_fn,
+                "type_infer_fn": type_infer_fn,
+                "iterable": stage_expr(iter, context)
+            }, lineno, col_offset, context)
+
         case ast.DictComp(key=key_expr, value=value_expr,
                           generators=[ast.comprehension(target=ast.Name(id=targetname), iter=iter, ifs=ifs)],
                           lineno=lineno, col_offset=col_offset):
@@ -514,14 +565,13 @@ class VariableAnalyzer(ast.NodeVisitor):
     def __init__(self):
         self.read_variables = set()
         self.written_variables = set()
-        self.not_track_write=0
+        self.not_track_write = 0
 
     def visit_Name(self, node):
         self.read_variables.add(node.id)
         if isinstance(node.ctx, ast.Store):
-            if self.not_track_write==0:
+            if self.not_track_write == 0:
                 self.written_variables.add(node.id)
-
 
     def handle_import_alias(self, alias):
         match alias:
@@ -538,13 +588,14 @@ class VariableAnalyzer(ast.NodeVisitor):
     def visit_ImportFrom(self, node):
         for alias in node.names:
             self.handle_import_alias(alias)
-    def visit_ListComp(self, node : ast.ListComp):
-        self.not_track_write+=1
+
+    def visit_ListComp(self, node: ast.ListComp):
+        self.not_track_write += 1
         self.visit(node.elt)
         for g in node.generators:
             self.visit(g)
 
-        self.not_track_write-=1
+        self.not_track_write -= 1
 
 
 tmp_function_counter = 0
@@ -1034,6 +1085,8 @@ def stage_stmt(stmt, context: StageContext):
                                                               col_offset=col_offset)], value=lambda_val, lineno=lineno,
                                             col_offset=col_offset))
             context.available_variables.add(name)
+        case ast.Import():
+            context.block.append(stmt)
         case _:
             print("unhandled stmt", type(stmt))
             raise NotImplementedError()
@@ -1282,18 +1335,18 @@ def stage_and_compile(func):
     LineNumberAdapter(line_offset, col_offset).visit(fn_ast)
     fn_ast.body[0] = stage_function(fn_ast.body[0], func.__globals__)
     # print(ast.dump(fn_ast))
-    #print(ast.unparse(fn_ast))
+    # print(ast.unparse(fn_ast))
     import hipy.lib.builtins
-    globals = {**func.__globals__, "__builtins__": hipy.lib.builtins}
+    globals = {**func.__globals__, "__builtins__": hipy.lib.builtins, "__intrinsics__": hipy.intrinsics}
     exec(builtins.compile(fn_ast, filename=inspect.getsourcefile(func), mode="exec"), globals)
     compiled_fn = globals[func.__name__]
     return compiled_fn
 
 
 def compile_function(hlc_function, arg_types, kw_types, module, fallback, debug):
-    compiled_fn= hlc_function.get_compiled_fn()
-    base_module=hlc_function.pyfunc.__module__
-    mangled_func_name = compiled_fn.__name__+f"{hipy.config.function_suffix}"  # todo: mangle_func_name(fn_node.name, [arg_types[n] for n in arg_order]) + "_".join(arg_order)
+    compiled_fn = hlc_function.get_compiled_fn()
+    base_module = hlc_function.pyfunc.__module__
+    mangled_func_name = compiled_fn.__name__ + f"{hipy.config.function_suffix}"  # todo: mangle_func_name(fn_node.name, [arg_types[n] for n in arg_order]) + "_".join(arg_order)
     # todo: check if function already exists
     # todo: real function signature
     problematic = []
@@ -1302,7 +1355,8 @@ def compile_function(hlc_function, arg_types, kw_types, module, fallback, debug)
         # todo: fix
         module.block.ops.clear()
         fn = ir.Function(module, mangled_func_name, [t.ir_type() for t in arg_types], ir.void)
-        ctxt = Context(module, fn.body, decisions=problematic, invalid_action_id=invalid_action_id, debug=debug, base_module=base_module)
+        ctxt = Context(module, fn.body, decisions=problematic, invalid_action_id=invalid_action_id, debug=debug,
+                       base_module=base_module)
         with ctxt.handle_action("args"):
             args = [ctxt.wrap(t.construct(v, ctxt)) for t, v in zip(arg_types, fn.args)]
         if not fallback:
@@ -1362,10 +1416,10 @@ def compile_function(hlc_function, arg_types, kw_types, module, fallback, debug)
         if len(local_problematic) == 0:
             return
         else:
-            #print("problematic", local_problematic)
+            # print("problematic", local_problematic)
             # if invalid_action_id == -3:
             #    break
-            #print(module)
+            # print(module)
             problematic.extend(local_problematic)
             invalid_action_id -= 1
 
