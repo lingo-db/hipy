@@ -3,7 +3,7 @@ __HIPY_MODULE__ = "math"
 import hipy
 import sys
 import hipy.intrinsics as intrinsics
-
+import math as pymath
 hipy.register(sys.modules[__name__])
 
 @hipy.compiled_function
@@ -36,3 +36,6 @@ def sin(x):
 @hipy.compiled_function
 def cos(x):
     return intrinsics.call_builtin("scalar.float.cos",float,  [x])
+
+
+pi = pymath.pi

@@ -371,6 +371,7 @@ class PythonModule(Value):
         return _context.pyobj(ir.PyImport(_context.block, self.value.py_module.__name__).result)
 
     def __getattr__(self, name):
+        import hipy.lib.builtins
         val = getattr(self.module, name)
         if inspect.ismodule(val):
             return PythonModule(val)
@@ -378,6 +379,8 @@ class PythonModule(Value):
             match val:
                 case HLCFunction():
                     return HLCFunctionValue(val)
+                case float():
+                    return hipy.lib.builtins._const_float(val)
                 case _:
                     if inspect.isclass(val) and hasattr(val, "__hipy__"):
                         return HLCClassValue(val)
