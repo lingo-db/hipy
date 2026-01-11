@@ -37,5 +37,11 @@ def sin(x):
 def cos(x):
     return intrinsics.call_builtin("scalar.float.cos",float,  [x])
 
+@hipy.compiled_function
+def acos(x):
+    return intrinsics.call_builtin("scalar.float.acos",float,  [x])
 
+@hipy.compiled_function
+def atan2(x, y):
+    return intrinsics.call_builtin("scalar.float.atan2",float,  [x, y])
 pi = pymath.pi

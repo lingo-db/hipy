@@ -322,6 +322,48 @@ class TableType:
                 "members": {m: t.serialize() for m, t in self.members}
                 }
 
+class DateType:
+    def __str__(self):
+        return 'date'
+
+    def serialize(self):
+        return {"kind": "type",
+                "name": "date"
+                }
+
+    def mangle(self):
+        return "date"
+
+    def __hash__(self):
+        return hash(self.mangle())
+
+    def __eq__(self, other):
+        return self.mangle() == other.mangle()
+
+    def get_generic(self):
+        return self
+
+class IntervalType:
+    def __str__(self):
+        return 'interval'
+
+    def serialize(self):
+        return {"kind": "type",
+                "name": "interval"
+                }
+
+    def mangle(self):
+        return "interval"
+
+    def __hash__(self):
+        return hash(self.mangle())
+
+    def __eq__(self, other):
+        return self.mangle() == other.mangle()
+
+    def get_generic(self):
+        return self
+
 
 type DBPyType = IntegerType | FloatType
 
@@ -336,6 +378,8 @@ f32 = FloatType(32)
 f64 = FloatType(64)
 string = StringType()
 pyobj = PyObjType()
+date = DateType()
+interval = IntervalType()
 
 ssa_value_ctr = 0
 

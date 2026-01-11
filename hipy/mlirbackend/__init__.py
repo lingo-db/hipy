@@ -51,6 +51,10 @@ def to_mlir_type(t):
             return mlirtypes.IntegerType.get_signless(1)  # MLIR does not have a void type, so we use a dummy type
         case ir.PyObjType():
             return py_interp.PyObject.get(curr_context)
+        case ir.DateType():
+            return db.DateType.get(unit=db.DateUnitAttr.day, context=curr_context)
+        case ir.IntervalType():
+            return db.IntervalType.get(unit=db.IntervalUnitAttr.daytime, context=curr_context)
         case _:
             assert False
     print(t)
@@ -231,6 +235,8 @@ def to_mlir_stmt(stmt, mapping):
                     mapping[r] = db.CastOp(to_mlir_type(r.type), mapping[args[0]]).result
                 case "scalar.string.to_python", [ir.StringType()]:
                     mapping[r] = py_interp.CastToPyObject(to_mlir_type(r.type), mapping[args[0]]).result
+                case "scalar.string.from_python", [ir.PyObjType()]:
+                    mapping[r] = py_interp.CastFromPyObject(to_mlir_type(r.type), mapping[args[0]]).result
                 case "scalar.int.to_python", [ir.IntType()]:
                     mapping[r] = py_interp.CastToPyObject(to_mlir_type(r.type), mapping[args[0]]).result
                 case "scalar.string.compare.eq", [ir.StringType(), ir.StringType()]:
@@ -475,6 +481,15 @@ def to_mlir_stmt(stmt, mapping):
                 case "scalar.float.cos", [ir.FloatType()]:
                     mapping[r] = db.RuntimeCall(to_mlir_type(r.type), str_attr("Cos"),
                                                 [mapping[args[0]]]).result
+                case "scalar.float.acos", [ir.FloatType()]:
+                    mapping[r] = db.RuntimeCall(to_mlir_type(r.type), str_attr("ACos"),
+                                                [mapping[args[0]]]).result
+                case "scalar.float.atan2", [ir.FloatType(), ir.FloatType()]:
+                    mapping[r] = db.RuntimeCall(to_mlir_type(r.type), str_attr("ATan2"),
+                                                [mapping[args[0]], mapping[args[1]]]).result
+                case "scalar.float.round", [ir.FloatType(), ir.IntType()]:
+                    mapping[r] = db.RuntimeCall(to_mlir_type(r.type), str_attr("RoundFloat"),
+                                                [mapping[args[0]], mapping[args[1]]]).result
                 case "scalar.float.to_python", [ir.FloatType()]:
                     mapping[r] = py_interp.CastToPyObject(to_mlir_type(r.type), mapping[args[0]]).result
                 case "scalar.float.to_string", [ir.FloatType()]:
@@ -485,6 +500,10 @@ def to_mlir_stmt(stmt, mapping):
                 case "scalar.string.format_single", [ir.StringType(), ir.IntType()]:
                     mapping[r] = db.RuntimeCall(db.StringType.get(curr_context), str_attr("FmtInt"),
                                                 [mapping[args[0]], mapping[args[1]]]).result
+                case "date.diff", [ir.DateType(), ir.DateType()]:
+                    mapping[r] = db.RuntimeCall(to_mlir_type(r.type), str_attr("DateDiffInterval"), [mapping[args[0]], mapping[args[1]]]).result
+                case "interval.days", [ir.IntervalType()]:
+                    mapping[r] = db.RuntimeCall(mlirtypes.i64(), str_attr("IntervalGetDay"), [mapping[args[0]]]).result
                 case _:
                     print("Can not translate op", name, "for types", arg_types, file=sys.stderr)
                     assert False

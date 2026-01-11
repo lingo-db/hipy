@@ -15,9 +15,10 @@ __HIPY_MODULE__ = "builtins"
 
 @hipy.classdef
 class object(Value):
-    def __init__(self, value, known_object=None):
+    def __init__(self, value, known_object=None, abstract_path=None):
         super().__init__(value)
         self._known_object = known_object
+        self._abstract_path = abstract_path
 
     @hipy.compiled_function
     def __topython__(self):
@@ -66,32 +67,82 @@ class object(Value):
     @hipy.compiled_function
     def __pow__(self, power, modulo=None):
         if intrinsics.isa(power, _const_int):
-            if power<5:
-                res=self
-                for i in range(1,power):
-                    res=res*self
+            if power < 5:
+                res = self
+                for i in range(1, power):
+                    res = res * self
                 return res
         return intrinsics.call_builtin("python.operator.pow", object, [self, power])
 
     @hipy.raw
     def __call__(self, *args, _context, **kwargs):
-        def py_func_get_return_type(fn):
-            try:
-                fn_source = inspect.getsource(fn)
-                fn_ast = ast.parse(fn_source)
-                match fn_ast:
-                    case ast.Module(body=[ast.FunctionDef(returns=ast.Name(id=return_type))]):
-                        if return_type == "int":
-                            return int.__hipy_create_type__(), "scalar.int.from_python"
-                        elif return_type == "float":
-                            return float.__hipy_create_type__(), "scalar.float.from_python"
-                        elif return_type == "bool":
-                            return bool.__hipy_create_type__(), "scalar.bool.from_python"
-                        elif return_type == "str":
-                            return str.__hipy_create_type__(), "scalar.string.from_python"
-                    case _:
-                        return None, None
-            except:
+
+        def get_type_for_ast(definition):
+            match definition:
+                case ast.FunctionDef(returns=ast.Name(id=name)):
+                    match name:
+                        case 'str' | 'int' | 'float':
+                            return name
+                        case 'LiteralString':
+                            return 'str'
+                    return name
+
+        def get_converter_for_type(t):
+            match t:
+                case "int":
+                    return int.__hipy_create_type__(), "scalar.int.from_python"
+                case "float":
+                    return float.__hipy_create_type__(), "scalar.float.from_python"
+                case "bool":
+                    return bool.__hipy_create_type__(), "scalar.bool.from_python"
+                case "str":
+                    return str.__hipy_create_type__(), "scalar.string.from_python"
+            return None, None
+
+        def infer_return_type_typeshed(name):
+            import typeshed_client
+            resolver = typeshed_client.Resolver()
+            splitted = name.rsplit(".", 1)
+            classname = splitted[0]
+            membername = splitted[1]
+            resolved = resolver.get_fully_qualified_name(classname)
+            if not resolved:
+                return None
+            child = resolved.child_nodes[membername]
+            if not child:
+                return None
+            child_ast = child.ast
+            if not child_ast:
+                return None
+            match child_ast:
+                case typeshed_client.OverloadedName(definitions=defs):
+                    shared_type = None
+                    for definition in defs:
+                        t = get_type_for_ast(definition)
+                        if shared_type is None:
+                            shared_type = t
+                        else:
+                            if shared_type != t:
+                                return None
+                    return shared_type
+                case ast.FunctionDef():
+                    return get_type_for_ast(child_ast)
+
+        def try_infer_return_type():
+            if self.value._known_object is not None:
+                fn = self.value._known_object
+                try:
+                    fn_source = inspect.getsource(fn)
+                    fn_ast = ast.parse(fn_source)
+                    match fn_ast:
+                        case ast.Module(body=[definition]):
+                            return get_converter_for_type(get_type_for_ast(definition))
+                    return None, None
+                except:
+                    return None, None
+            elif self.value._abstract_path is not None:
+                return get_converter_for_type(infer_return_type_typeshed(self.value._abstract_path))
+            else:
                 return None, None
 
         to_python = lambda v: _context.to_python(v)
@@ -100,7 +151,7 @@ class object(Value):
                           [to_python(a).get_ir_value(_context) for a in args],
                           [(n, to_python(a).get_ir_value(_context)) for n, a in kwargs.items()], ).result),
             _context)
-        ret_type, conversion = py_func_get_return_type(self.value._known_object)
+        ret_type, conversion = try_infer_return_type()
         if ret_type is not None:
             return _context.wrap(_context.call_builtin(conversion, ret_type, [py_res]))
         return py_res
@@ -125,7 +176,8 @@ class object(Value):
                 pass
         match item:
             case CValue(cval=attr):
-                return ValueHolder(object(ir.PyGetAttr(_context.block, attr, self.get_ir_value(_context)).result),
+                return ValueHolder(object(ir.PyGetAttr(_context.block, attr, self.get_ir_value(_context)).result,
+                                          abstract_path=f"{self.value._abstract_path}.{attr}" if self.value._abstract_path else None),
                                    _context)
             case _:
                 raise NotImplementedError()
@@ -319,11 +371,13 @@ class int(Value):
         return self._int_op("lshift", other)
 
     @hipy.compiled_function
-    def __neg__ (self):
+    def __neg__(self):
         return 0 - self
+
     @hipy.compiled_function
     def __invert__(self):
         return self._int_op("xor", -1)
+
     @hipy.compiled_function
     def __and__(self, other):
         return self._int_op("and", other)
@@ -586,6 +640,7 @@ class float(Value):
     @hipy.compiled_function
     def __bool__(self):
         return self != 0.0
+
     @staticmethod
     def __merge__(self, other, self_fn, other_fn, context):
         if isinstance(other.value, float):
@@ -656,11 +711,13 @@ class str(Value):
 
     @hipy.compiled_function
     def __topython__(self):
-        return intrinsics.call_builtin("scalar.string.to_python", object, [self])
+        return intrinsics.annotate_object_abstract_path(
+            intrinsics.call_builtin("scalar.string.to_python", object, [self]), "builtins.str")
 
     @hipy.compiled_function
     def strip(self):
         return intrinsics.call_builtin("scalar.string.strip", str, [self])
+
     @hipy.compiled_function
     def rstrip(self):
         return intrinsics.call_builtin("scalar.string.rstrip", str, [self])
@@ -800,7 +857,7 @@ class str(Value):
             if not first:
                 res = res + self
             first = False
-            res = res + v #todo: if python: "cast to str"
+            res = res + v  # todo: if python: "cast to str"
         return res
 
     @hipy.compiled_function
@@ -816,9 +873,22 @@ class str(Value):
         return intrinsics.call_builtin("scalar.string.length", int, [self])
 
     @hipy.compiled_function
-    def split(self, pattern, maxsplit=-1):
-        return intrinsics.call_builtin("scalar.string.split", intrinsics.create_type(list, str),
-                                       [self, pattern, maxsplit])
+    def split(self, pattern=None, maxsplit=-1):
+        if pattern is None:
+            res = []
+            curr = ""
+            for c in self:
+                o = ord (c)
+                if (o>= 9 and o <=13) or (o >= 28 or o <=32) or o == 160 or o == 5760 or (o >= 8192 and o<= 8202) or o == 8232 or o == 8233 or o == 8239 or o == 8287 or o == 12288:
+                    if curr:
+                        res.append(curr)
+                        curr = ""
+                else:
+                    curr = curr + c
+            return res
+        else:
+            return intrinsics.call_builtin("scalar.string.split", intrinsics.create_type(list, str),
+                                           [self, pattern, maxsplit])
 
     @hipy.classdef
     class _iterator(Value):
@@ -880,6 +950,22 @@ class str(Value):
                 res = False
         return res
 
+    @hipy.compiled_function
+    def count(self, sub, start=None, end=None):
+        if start is None:
+            start = 0
+        if end is None:
+            end = len(self)
+        c = 0
+        while start < end:
+            pos = self.find(sub, start, end)
+            if pos == -1:
+                start = end
+            else:
+                c += 1
+                start = pos + len(sub)
+        return c
+
 
 @hipy.classdef
 class _const_str(CValue, str):
@@ -891,8 +977,6 @@ class _const_str(CValue, str):
 
     def __abstract__(self, _context):
         return str(ir.Constant(_context.block, self.cval, ir.string).result)
-
-
 
     @staticmethod
     def translate_python_spec_to_cpp(py: str) -> str:
@@ -984,6 +1068,7 @@ class _const_str(CValue, str):
         out += "}"
 
         return out
+
     @hipy.raw
     def __get_format_parts(self, _context):
         import re
@@ -1046,13 +1131,12 @@ class _const_str(CValue, str):
 
             return literals, specs, cpp_specs
 
-
-
         const_str = self.value.cval
 
         literals, specs, cpp_specs = parse_and_translate_format(const_str)
         return _context.create_tuple([_context.create_list([_context.constant(s) for s in literals]),
-                                        _context.create_list([_context.constant(s) for s in cpp_specs])])
+                                      _context.create_list([_context.constant(s) for s in cpp_specs])])
+
     @hipy.raw
     def __get_percentage_format_parts(self, _context):
         from typing import List, Tuple
@@ -1242,12 +1326,12 @@ class _const_str(CValue, str):
             literals.append(fmt[last_literal_start:].replace('%%', '%'))
 
             return literals, specs
+
         const_str = self.value.cval
         literals, specs = decompose_percent_format(const_str)
         cpp_specs = [_const_str.translate_python_spec_to_cpp(spec) for spec in specs]
         return _context.create_tuple([_context.create_list([_context.constant(s) for s in literals]),
-                                        _context.create_list([_context.constant(s) for s in cpp_specs])])
-
+                                      _context.create_list([_context.constant(s) for s in cpp_specs])])
 
     @hipy.compiled_function
     def format(self, *args):
@@ -1325,9 +1409,9 @@ class list(Value):
 
     @staticmethod
     def __hipy_create_type__(*args) -> Type:
-        t=args[0]
+        t = args[0]
         if isinstance(t, builtins.list):
-            t=t[0]
+            t = t[0]
         return list.ListType(t)
 
     def __hipy_get_type__(self):
@@ -1341,6 +1425,7 @@ class list(Value):
             intrinsics.call_builtin("list.append", None, [self, item])
         else:
             intrinsics.not_implemented()
+
     @hipy.compiled_function
     def sort(self):
         compare_fn = intrinsics.bind(lambda l, r: l < r, [self._element_type, self._element_type])
@@ -1511,7 +1596,7 @@ class list(Value):
                 break
         if ret != -1:
             return ret
-        intrinsics.call_builtin("error", None, ["ValueError: "+str(item)+" not in list"])
+        intrinsics.call_builtin("error", None, ["ValueError: " + str(item) + " not in list"])
         return ret
 
 
@@ -1574,6 +1659,7 @@ class _concrete_list(list):
                                          [other])
         else:
             raise NotImplementedError()
+
     @hipy.raw
     def __mul__(self, multiplier, _context):
         if isinstance(multiplier.value, _const_int):
@@ -1662,9 +1748,11 @@ class dict(Value):
     @hipy.compiled_function
     def __hipy__repr__(self):
         return "{" + ", ".join([repr(k) + ": " + repr(self[k]) for k in self]) + "}"
+
     @hipy.compiled_function
     def __len__(self):
         return intrinsics.call_builtin("dict.length", int, [self])
+
     @staticmethod
     def __merge__(self, other, self_fn, other_fn, context):
         def to_empty_dict(key_type, value_type):
@@ -1757,6 +1845,7 @@ class dict(Value):
 
         def __hipy_get_type__(self) -> Type:
             return dict._iterator.T(self._dict_val.__hipy_get_type__())
+
     @hipy.classdef
     class _items(Value):
         def __init__(self, dict_val, value=None):
@@ -1764,7 +1853,7 @@ class dict(Value):
             self._dict_val = dict_val
 
         @hipy.raw
-        def __iter__(self,_context):
+        def __iter__(self, _context):
             return _context.wrap(dict._items._iterator(self.value._dict_val))
 
         @hipy.compiled_function
@@ -1797,6 +1886,7 @@ class dict(Value):
 
         def __hipy_get_type__(self) -> Type:
             return dict._items.T(self._dict_val.__hipy_get_type__())
+
         @hipy.classdef
         class _iterator(Value):
             def __init__(self, dict_val, value=None):
@@ -1808,7 +1898,7 @@ class dict(Value):
 
             @hipy.compiled_function
             def __itertype__(self):
-                return intrinsics.create_type(tuple,[self._dict_val._key_type, self._dict_val._value_type])
+                return intrinsics.create_type(tuple, [self._dict_val._key_type, self._dict_val._value_type])
 
             @hipy.compiled_function
             def __iterate__(self, loopfn, x, iter_vals):
@@ -1854,6 +1944,7 @@ class dict(Value):
     def items(self, _context):
         return _context.wrap(dict._items(self.as_abstract(_context)))
 
+
 def _type_of_constant(cval):
     match cval:
         case builtins.bool():
@@ -1868,9 +1959,12 @@ def _type_of_constant(cval):
         case _:
             return object.PythonObjectType()
 
+
 @hipy.compiled_function
 def _create_cmp_fn(key_type):
-    return intrinsics.bind(lambda l, r : l==r, [key_type, key_type])
+    return intrinsics.bind(lambda l, r: l == r, [key_type, key_type])
+
+
 @hipy.classdef
 class _concrete_dict(dict):
 
@@ -1887,11 +1981,11 @@ class _concrete_dict(dict):
                                                                   self._to_insert])
         self._value_type = _common_type(
             [v.value.__hipy_get_type__() for v in self.c_dict.values()] + [v.value.__hipy_get_type__() for k, v in
-                                                                            self._to_insert])
+                                                                           self._to_insert])
 
     def __abstract__(self, _context):
-        dict_type=self.__hipy_get_type__()
-        key_type=_context.wrap(TypeValue(self._key_type))
+        dict_type = self.__hipy_get_type__()
+        key_type = _context.wrap(TypeValue(self._key_type))
         create_cmp_fn_val = _context.wrap(HLCFunctionValue(_create_cmp_fn))
         eq_fn = _context.perform_call(create_cmp_fn_val, [key_type])
         l = ValueHolder(_context.call_builtin("dict.create", dict_type, [eq_fn]), _context)
@@ -2069,14 +2163,17 @@ class range(static_object["start", "stop", "step"]):
                     return _context.wrap(ConstIterValue(self, [_context.constant(i) for i in r]))
         raise NotImplementedError()
 
+
 @hipy.classdef
 class enumerate(static_object["iterable",]):
     def __init__(self, iterable):
         super().__init__(lambda args: enumerate(*args), iterable)
+
     @staticmethod
     @hipy.raw
     def _construct(iterable, _context=None):
         return hipy.value.ValueHolder(enumerate(iterable), _context)
+
     @staticmethod
     @hipy.compiled_function
     def __create__(iterable):
@@ -2086,21 +2183,22 @@ class enumerate(static_object["iterable",]):
     def __topython__(self):
         return intrinsics.import_pymodule("__main__").__builtins__.enumerate(self.iterable)
 
-
     @hipy.compiled_function
     def __itertype__(self):
-        return intrinsics.create_type(tuple,[int,self.iterable.__itertype__()])
+        return intrinsics.create_type(tuple, [int, self.iterable.__itertype__()])
 
     @hipy.compiled_function
     def __iterate__(self, loopfn, x, iter_vals):
-        #todo: maybe we should use a different type for the mutable counter...
-        counter=[0]
-        def wrapperfn(x, iter_vals,i):
-            new_res=intrinsics.call_indirect(loopfn,[x,iter_vals,(counter[0],i)],intrinsics.typeof(iter_vals))
-            counter[0]+=1
+        # todo: maybe we should use a different type for the mutable counter...
+        counter = [0]
+
+        def wrapperfn(x, iter_vals, i):
+            new_res = intrinsics.call_indirect(loopfn, [x, iter_vals, (counter[0], i)], intrinsics.typeof(iter_vals))
+            counter[0] += 1
             return new_res
 
-        wrapped_fn=intrinsics.bind(wrapperfn, [intrinsics.typeof(x), intrinsics.typeof(iter_vals), self.iterable.__itertype__()] )
+        wrapped_fn = intrinsics.bind(wrapperfn,
+                                     [intrinsics.typeof(x), intrinsics.typeof(iter_vals), self.iterable.__itertype__()])
         return self.iterable.__iterate__(wrapped_fn, x, iter_vals)
 
     def __track__(self, iter_value, context):
@@ -2317,7 +2415,6 @@ class bytes(Value):
             intrinsics.not_implemented()
 
 
-
 @hipy.classdef
 class _const_bytes(CValue, bytes):
     def __init__(self, cval):
@@ -2349,6 +2446,7 @@ def min(*args):
     for i in l:
         res = res if res < i else i
     return res
+
 
 @hipy.compiled_function
 def max(*args):
@@ -2393,15 +2491,33 @@ def abs(x):
     else:
         intrinsics.not_implemented()
 
+
 @hipy.raw
 def _format_internal(value, formatspec, _context=None):
     with _context.no_fallback():
-        return _context.perform_call(_context.get_attr(value, "__format__"),[formatspec])
+        return _context.perform_call(_context.get_attr(value, "__format__"), [formatspec])
+
 
 @hipy.compiled_function
 def format(value, formatspec=""):
     return _format_internal(value, formatspec)
 
+
+@hipy.compiled_function
+def round(value, ndigits=None):
+    if intrinsics.isa(value, float):
+        if ndigits is None:
+            return intrinsics.call_builtin("scalar.float.round", int, [value, 0])
+        else:
+            return intrinsics.call_builtin("scalar.float.round", float, [value, ndigits])
+    elif intrinsics.isa(value, int):
+        if ndigits is None:
+            return value
+        else:
+            intrinsics.not_implemented()
+            return value
+    else:
+        intrinsics.not_implemented()
 
 
 @hipy.classdef
@@ -2413,6 +2529,7 @@ class _MaybeNone(static_object["_isNone", "_val"]):
     @hipy.raw
     def __create__(isNone, val, _context=None):
         return hipy.value.ValueHolder(_MaybeNone(isNone, val), _context)
+
     @hipy.compiled_function
     def __topython__(self):
         if self._isNone:
@@ -2423,7 +2540,8 @@ class _MaybeNone(static_object["_isNone", "_val"]):
     @hipy.compiled_function
     def __hipy_getattr__(self, name):
         if self._isNone:
-            intrinsics.call_builtin("error", None, ["AttributeError: 'NoneType' object has no attribute '" + name + "'"])
+            intrinsics.call_builtin("error", None,
+                                    ["AttributeError: 'NoneType' object has no attribute '" + name + "'"])
         return intrinsics.get_attr(self._val, name)
 
     @hipy.compiled_function
@@ -2432,12 +2550,14 @@ class _MaybeNone(static_object["_isNone", "_val"]):
             return 'None'
         else:
             return self._val.__repr__()
+
     @hipy.compiled_function
     def __str__(self):
         if self._isNone:
             return 'None'
         else:
             return self._val.__str__()
+
     @staticmethod
     def __merge__(self, other, self_fn, other_fn, context):
         if isinstance(other.value, _MaybeNone):

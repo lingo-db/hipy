@@ -234,3 +234,15 @@ def test_string_ord():
 97
 97
 """)
+
+@hipy.compiled_function
+def fn_string_count():
+    print("ababc".count("ab"))
+    print("ababc".count("ab",1))
+    print("ababc".count("ab",0,4))
+
+def test_string_count():
+    check_prints(fn_string_count, """2
+1
+2
+""")

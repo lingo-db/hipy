@@ -6,6 +6,7 @@ import shutil
 import hipy.compiler
 import hipy.mlirbackend
 import hipy.lib.builtins
+import hipy.lib.datetime
 import hipy.ir as ir
 import hipy.config
 from hipy.value import SimpleType
@@ -37,6 +38,8 @@ for arg_type in arg_types_json:
         arg_types.append(SimpleType(hipy.lib.builtins.int, ir.int))
     elif arg_type == 'float':
         arg_types.append(SimpleType(hipy.lib.builtins.float, ir.f64))
+    elif arg_type == 'date':
+        arg_types.append(SimpleType(hipy.lib.datetime.date, ir.date))
     else:
         raise ValueError(f"Unknown argument type: {arg_type}")
 

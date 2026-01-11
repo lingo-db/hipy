@@ -78,6 +78,16 @@ def to_python(value, _context):
     return _context.to_python(value)
 
 @hipy.raw
+def annotate_object_abstract_path(value, abstract_path, _context):
+    match abstract_path:
+        case ValueHolder(value=CValue(cval=path_value)):
+            import hipy.lib.builtins
+            assert(isinstance(value.value, hipy.lib.builtins.object))
+            value.value._abstract_path = path_value
+            return value
+    raise NotImplementedError()
+
+@hipy.raw
 def try_narrow(value,type, _context):
     if isa(value,type,_context).value.cval:
         return value
