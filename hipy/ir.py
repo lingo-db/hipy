@@ -364,6 +364,25 @@ class IntervalType:
     def get_generic(self):
         return self
 
+class NullableType:
+    def __init__(self, type):
+        self.type = type
+
+    def __str__(self):
+        return 'nullable[' + str(self.type) + ']'
+    def serialize(self):
+        return {"kind": "type",
+                "name": "nullable",
+                "type": self.type.serialize()
+                }
+    def mangle(self):
+        return f"nullable_{self.type.mangle()}"
+    def __hash__(self):
+        return hash(self.mangle())
+    def __eq__(self, other):
+        return self.mangle() == other.mangle()
+    def get_generic(self):
+        return NullableType(None)
 
 type DBPyType = IntegerType | FloatType
 
