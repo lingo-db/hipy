@@ -55,6 +55,8 @@ def to_mlir_type(t):
             return db.DateType.get(unit=db.DateUnitAttr.day, context=curr_context)
         case ir.IntervalType():
             return db.IntervalType.get(unit=db.IntervalUnitAttr.daytime, context=curr_context)
+        case ir.NullableType(type= inner_type):
+            return db.NullableType.get(to_mlir_type(inner_type))
         case _:
             assert False
     print(t)
@@ -64,6 +66,12 @@ def to_mlir_type(t):
 def str_attr(s):
     return mlir.StringAttr.get(s)
 
+def str_from_const(val):
+    match val.producer:
+        case ir.Constant(result=r, v=v):
+            assert isinstance(v, str)
+            return v
+    assert False
 
 tmp_col_cntr = 0
 tmp_member_cntr = 0
@@ -504,6 +512,12 @@ def to_mlir_stmt(stmt, mapping):
                     mapping[r] = db.RuntimeCall(to_mlir_type(r.type), str_attr("DateDiffInterval"), [mapping[args[0]], mapping[args[1]]]).result
                 case "interval.days", [ir.IntervalType()]:
                     mapping[r] = db.RuntimeCall(mlirtypes.i64(), str_attr("IntervalGetDay"), [mapping[args[0]]]).result
+                case "sql.execute" , [ir.StringType(), *_]:
+                    mapping[r] = relalg.SQLQueryOp(to_mlir_type(r.type),str_attr(str_from_const(args[0])), [mapping[arg] for arg in args[1:]]).result
+                case "nullable.is_null", [ir.NullableType()]:
+                    mapping[r] = db.IsNullOp(mapping[args[0]]).result
+                case "nullable.get_value", [ir.NullableType()]:
+                    mapping[r] = db.NullableGetVal(mapping[args[0]]).result
                 case _:
                     print("Can not translate op", name, "for types", arg_types, file=sys.stderr)
                     assert False
