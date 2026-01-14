@@ -242,11 +242,11 @@ def to_mlir_stmt(stmt, mapping):
                 case "scalar.float.from_string", [ir.StringType()]:
                     mapping[r] = db.CastOp(to_mlir_type(r.type), mapping[args[0]]).result
                 case "scalar.string.to_python", [ir.StringType()]:
-                    mapping[r] = py_interp.CastToPyObject(to_mlir_type(r.type), mapping[args[0]]).result
+                    mapping[r] = py_interp.CastToPyObject(to_mlir_type(r.type), mapping[args[0]],str_attr("builtins.str")).result
                 case "scalar.string.from_python", [ir.PyObjType()]:
-                    mapping[r] = py_interp.CastFromPyObject(to_mlir_type(r.type), mapping[args[0]]).result
+                    mapping[r] = py_interp.CastFromPyObject(to_mlir_type(r.type), mapping[args[0]],str_attr("builtins.str")).result
                 case "scalar.int.to_python", [ir.IntType()]:
-                    mapping[r] = py_interp.CastToPyObject(to_mlir_type(r.type), mapping[args[0]]).result
+                    mapping[r] = py_interp.CastToPyObject(to_mlir_type(r.type), mapping[args[0]],str_attr("builtins.int")).result
                 case "scalar.string.compare.eq", [ir.StringType(), ir.StringType()]:
                     mapping[r] = db.CmpOp(db.DBCmpPredicate.eq, mapping[args[0]], mapping[args[1]]).result
                 case "scalar.string.compare.lt", [ir.StringType(), ir.StringType()]:
