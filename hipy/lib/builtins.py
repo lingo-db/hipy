@@ -474,6 +474,13 @@ class int(Value):
     def __hipy__repr__(self):
         return str(self)
 
+    @hipy.compiled_function
+    def __format__(self, format_spec):
+        if format_spec == "":
+            return str(self)
+        else:
+            intrinsics.not_implemented()
+
 
 @hipy.classdef
 class _const_int(CValue, int):
@@ -658,6 +665,27 @@ class float(Value):
     @hipy.compiled_function
     def __hipy__repr__(self):
         return str(self)
+
+    @hipy.raw
+    def _convert_format_spec_to_cpp(self, format_spec,_context):
+        match format_spec.value:
+            case CValue(cval=fmt):
+                # check if fmt is .\d+f
+                if fmt.startswith(".") and fmt.endswith("f"):
+                    precision_str = fmt[1:-1]
+                    if precision_str.isdigit():
+                        precision = builtins.int(precision_str)
+                        cpp_format = "{:." + builtins.str(precision) + "f}"
+                        return _context.constant(cpp_format)
+        raise NotImplementedError("Unsupported format specifier")
+
+    @hipy.compiled_function
+    def __format__(self, format_spec):
+        if format_spec == "":
+            return str(self)
+        else:
+            cppformatStr = self._convert_format_spec_to_cpp(format_spec)
+            return intrinsics.call_builtin("scalar.string.format_single", str, [cppformatStr, self])
 
 
 @hipy.classdef

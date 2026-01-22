@@ -558,6 +558,14 @@ def stage_expr(expr, context: StageContext):
                             lineno=lineno,
                             col_offset=col_offset)
                         formatted_values.append(format_call_expr)
+                    case ast.FormattedValue(value=value, conversion=-1, format_spec=ast.JoinedStr(values=[ast.Constant(value=format_spec)]), lineno=lineno, col_offset=col_offset):
+                        format_call_expr = ast.Call(
+                            func=ast.Name(id='format', ctx=ast.Load(), lineno=lineno, col_offset=col_offset),
+                            args=[value, ast.Constant(value=format_spec, lineno=lineno, col_offset=col_offset)],
+                            keywords=[],
+                            lineno=lineno,
+                            col_offset=col_offset)
+                        formatted_values.append(format_call_expr)
                     case _:
                         raise NotImplementedError()
                 # create list from formatted values
