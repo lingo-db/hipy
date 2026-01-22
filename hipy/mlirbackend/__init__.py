@@ -585,7 +585,8 @@ def to_mlir_stmt(stmt, mapping):
                                             [mapping[arg] for arg in args], mlir.ArrayAttr.get([])).result
             else:
                 assert False
-
+        case ir.PyImport(result=r, name=module_name):
+            mapping[r] = py_interp.ImportOp(to_mlir_type(r.type), str_attr(module_name)).result
         case _:
             print(stmt)
             assert False
