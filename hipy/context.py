@@ -1107,9 +1107,9 @@ class Context:
             return tuple(res_vals)
         # print(res_vals)
 
-    def generator_expr(self, iter_fn, iterable,type_infer_fn, _action_id):
+    def generator_expr(self, iter_fn, iterable,type_infer_fn, packed_vals, _action_id):
         with self.handle_action(_action_id):
-            return self.wrap(GeneratorExpressionValue(HLCFunction(iter_fn,iter_fn), iterable, type_infer_fn))
+            return self.wrap(GeneratorExpressionValue(HLCFunction(iter_fn,iter_fn), iterable, type_infer_fn, packed_vals))
 
     def infer_return_type(self, fn, arg_types_input, _action_id=None):
         from hipy.lib.builtins import _concrete_list

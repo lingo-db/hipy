@@ -752,10 +752,11 @@ class LambdaValue(Value):
 
 @hipy.decorators.classdef
 class GeneratorExpressionValue(Value):
-    def __init__(self, iter_fn, iterable, type_infer_fn):
+    def __init__(self, iter_fn, iterable, type_infer_fn, packed_values):
         self.iter_fn = iter_fn
         self.iterable = iterable
         self.type_infer_fn = type_infer_fn
+        self.packed_values = packed_values
         super().__init__(None)
 
     def __hipy_create_type__(self, *args):
@@ -778,7 +779,7 @@ class GeneratorExpressionValue(Value):
         return _context.get_by_name(typeof, "typeof")
     @hipy.compiled_function
     def __iterate__(self, loopfn, x, iter_vals):
-        return self.iter_fn(self.iterable, loopfn, x, iter_vals)
+        return self.iter_fn(self.packed_values,self.iterable, loopfn, x, iter_vals)
 
     def __track__(self, iter_value, context):
         pass

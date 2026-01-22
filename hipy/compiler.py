@@ -200,6 +200,7 @@ def stage_expr(expr, context: StageContext):
             iter_vals_var = get_tmp_name()
             callback_fn_var = get_tmp_name()
             iterable_var = get_tmp_name()
+            packed_vals_var = get_tmp_name()
             def wrap_ifs(ifs, expr):
                 if len(ifs) == 0:
                     return ast.Assign(
@@ -208,6 +209,17 @@ def stage_expr(expr, context: StageContext):
                 else:
                     return ast.If(test=ifs[0], body=[wrap_ifs(ifs[1:], expr)], orelse=[], lineno=lineno,
                                   col_offset=col_offset)
+
+            available_variables = context.available_variables
+            elt_analyzer = VariableAnalyzer()
+            elt_analyzer.visit(elt)
+            required_variables = list(
+                elt_analyzer.read_variables.intersection(available_variables).difference(set(targetname)))
+            unpackStmt = ast.Assign(targets = [ast.Tuple(elts=[ast.Name(id=var, ctx=ast.Store(), lineno=lineno, col_offset=col_offset) for var in
+                                                     required_variables],
+                                                   ctx=ast.Store(), lineno=lineno, col_offset=col_offset)],
+                                    value=ast.Name(packed_vals_var, ctx=ast.Load(), lineno=lineno, col_offset=col_offset),
+                                    lineno=lineno, col_offset=col_offset)
 
             forStmt = ast.For(target=ast.Name(targetname, ctx=ast.Store(), lineno=lineno, col_offset=col_offset),
                               iter=ast.Name(iterable_var, ctx=ast.Load(), lineno=lineno, col_offset=col_offset),
@@ -232,15 +244,18 @@ def stage_expr(expr, context: StageContext):
                                         ], keywords=[], lineno=lineno, col_offset=col_offset))], orelse=[],
                               lineno=lineno, col_offset=col_offset)
 
-            iter_fn = plain_function([forStmt, ast.Return(
+            iter_fn = plain_function([unpackStmt,forStmt, ast.Return(
                 value=ast.Name(iter_vals_var, lineno=lineno, col_offset=col_offset, ctx=ast.Load()), lineno=lineno,
-                col_offset=col_offset)], [iterable_var, callback_fn_var, read_only_var, iter_vals_var], context, lineno, col_offset)
+                col_offset=col_offset)], [packed_vals_var, iterable_var, callback_fn_var, read_only_var, iter_vals_var], context, lineno, col_offset)
             type_infer_fn = plain_function([ast.Return(value=elt, lineno=lineno, col_offset=col_offset)], [targetname],
                                            context, lineno, col_offset)
             return stage_context_call("generator_expr", {
                 "iter_fn": iter_fn,
                 "type_infer_fn": type_infer_fn,
-                "iterable": stage_expr(iter, context)
+                "iterable": stage_expr(iter, context),
+                "packed_vals": stage_expr(ast.Tuple(elts=[ast.Name(id=var, ctx=ast.Load(), lineno=lineno, col_offset=col_offset) for var in
+                                                     required_variables],
+                                                   ctx=ast.Load(), lineno=lineno, col_offset=col_offset), context)
             }, lineno, col_offset, context)
 
         case ast.DictComp(key=key_expr, value=value_expr,
