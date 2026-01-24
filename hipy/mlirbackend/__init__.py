@@ -518,6 +518,14 @@ def to_mlir_stmt(stmt, mapping):
                     mapping[r] = db.IsNullOp(mapping[args[0]]).result
                 case "nullable.get_value", [ir.NullableType()]:
                     mapping[r] = db.NullableGetVal(mapping[args[0]]).result
+                case "list.sort" , [ir.ListType(), ir.FunctionRefType()]:
+                    match args[1].producer:
+                        case ir.FunctionRef(name=func_name):
+                            pass
+                        case _:
+                            assert False, "Dict creation with closure type not supported"
+                    db.ListSortOp(mapping[args[0]], mlir.FlatSymbolRefAttr.get(func_name))
+                    mapping[r] = util.UndefOp(to_mlir_type(r.type)).result
                 case _:
                     print("Can not translate op", name, "for types", arg_types, file=sys.stderr)
                     assert False
