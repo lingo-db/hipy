@@ -246,3 +246,17 @@ def test_string_count():
 1
 2
 """)
+
+@hipy.compiled_function
+def fn_string_split_noparams():
+    print("a b c".split())
+    print(" a  b   c  ".split())
+    print("a\nb\nc".split())
+    print("a\tb\tc".split())
+def test_string_split_noparams():
+    check_prints(fn_string_split_noparams, """
+['a', 'b', 'c']
+['a', 'b', 'c']
+['a', 'b', 'c']
+['a', 'b', 'c']
+""")

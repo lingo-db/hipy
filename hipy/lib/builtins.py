@@ -907,12 +907,15 @@ class str(Value):
             curr = ""
             for c in self:
                 o = ord (c)
-                if (o>= 9 and o <=13) or (o >= 28 or o <=32) or o == 160 or o == 5760 or (o >= 8192 and o<= 8202) or o == 8232 or o == 8233 or o == 8239 or o == 8287 or o == 12288:
+                cond =  (o>= 9 and o <=13) or (o >= 28 and o <=32) or o == 160 or o == 5760 or (o >= 8192 and o<= 8202) or o == 8232 or o == 8233 or o == 8239 or o == 8287 or o == 12288
+                if cond:
                     if curr:
                         res.append(curr)
                         curr = ""
                 else:
                     curr = curr + c
+            if curr:
+                res.append(curr)
             return res
         else:
             return intrinsics.call_builtin("scalar.string.split", intrinsics.create_type(list, str),
