@@ -67,18 +67,24 @@ _action_id=N)`. Every Python construct maps to one. Highlights:
 | `IfExp` | Lowered to `_context._if(cond, bodyfn, elsefn, inputs=[…])` writing to a tmp var |
 | `Lambda` / `FunctionDef` | Produces the 3-variant expansion (see §3.1) |
 | `List/Tuple/Dict/Slice/Subscript/DictComp/ListComp` | Comprehensions are desugared to explicit `for` + `append`; the rest map to dedicated `_context` methods |
+| `GeneratorExp` | `(elt for target in iter if cond1 if cond2)` — desugared into a nested body that per-iteration calls `__intrinsics__.call_indirect(callback, [read_only, iter_vals, elt], typeof(iter_vals))`. Packaged as two helper functions (`iter_fn` and `type_infer_fn`) plus a `packed_vals` tuple of free variables read by `elt` (the rewriter uses `VariableAnalyzer` to compute this intersection against `available_variables`). The quadruple is handed to `_context.generator_expr`, which wraps it in a `GeneratorExpressionValue`. Only a *single* `comprehension` clause is supported — nested `for` in a generator expression raises `NotImplementedError`. |
+| `Import` | Appended to the rewritten block as-is. The exec step runs it in the staged-function scope so the name is available. There is no cogen for `import` — it's a compile-time side effect. |
 | `Assign` / `AugAssign` / `AnnAssign` | Via `Target` classes: `NameTarget`, `AttributeTarget`, `SubscriptTarget`, `TupleTarget` |
 | `If` | `_context._if(cond, bodyfn, elsefn, inputs=[…])`, wrapped in `try: … except _context.EarlyReturn as e: …` |
 | `While` / `For` | `_context._while(cond, body, read_only_inputs, iter_vals)` / `_context._for(over, target="tmpname", body, read_only_inputs, iter_vals)`. The iter target name is staged (so it's available inside the body) |
 | `Try(… except …)` | Split into two nested functions (`_try`/`except` closures, staged) joined via `_context._try(tryfn, exceptfn, try_closure, except_closure)`; also wrapped in `except _context.EarlyReturn` |
 | `Pass` | passed through |
+| `JoinedStr` (f-string) | Desugared in `stage_expr` to `"".join([format(v) for each FormattedValue, plus the literal pieces])`. Two `FormattedValue` shapes are supported: no format spec (→ `format(v)`) and a constant `:spec` written as `JoinedStr([Constant(spec)])` (→ `format(v, spec)`). `!r/!s/!a` conversions and interpolated format specs still raise `NotImplementedError`. Dispatch then goes to `value.__format__(spec)` — see `int.__format__` / `float.__format__` in `hipy/lib/builtins.py`, where `float` supports `.Nf` precision specs. |
 
 `rewrite_func` runs ahead of the rewrite:
 - `rewrite_if_return` — hoists the tail after an `if …: return` into the
   `else:` branch so returns stay at the block-tail invariant.
 - `rewrite_loop_break` / `rewrite_loop_if_continue` — desugars `break` and
   `continue` using a synthesized boolean guard. This avoids modeling
-  non-local control inside loops.
+  non-local control inside loops. Both `For` and `While` loops are
+  handled (`visit_For`, `visit_While` in `RewriteLoopWithBreak`); the
+  continue rewriter also preserves any existing `orelse` on the inner
+  `If` (important for `for`/`while`-`else` semantics).
 
 ### 3.1 Lambdas and nested functions — three variants
 
@@ -120,6 +126,9 @@ while True:
         args = [ctxt.wrap(t.construct(v, ctxt)) for t, v in zip(arg_types, fn.args)]
     if not fallback: ctxt.no_fallback() wrapper, else direct:
         res = compiled_fn(*args, _context=ctxt)          # actually emits IR!
+    with ctxt.handle_action("func_res"):
+        res = res.get_ir_value(ctxt)                     # events emitted while materializing
+                                                         # the return value are tagged "func_res"
     ir.Return(fn.body, [...]); fn.res_type = res.type
 
     # Post-mortem escape analysis
@@ -170,7 +179,10 @@ live in `hipy/context.py` — see `context.md`.
 - **`__builtins__` is overridden to `hipy.lib.builtins`** at exec time, which
   is how `int`, `str`, etc. resolve to HiPy virtual classes inside the
   generator. Changing this requires replacing the class lookup for every
-  builtin the rewriter emits.
+  builtin the rewriter emits. In addition, `__intrinsics__` is injected
+  pointing at `hipy.intrinsics` so that the rewriter can emit
+  `__intrinsics__.call_indirect` / `__intrinsics__.typeof` nodes for
+  generator-expression lowering without relying on the user's globals.
 - **Unhandled AST kinds raise `NotImplementedError`.** See paper §8
   "Limitations" — coroutines, class defs in user code, `with`, pattern
   matching, generators, scoping keywords, string templates, decorators are

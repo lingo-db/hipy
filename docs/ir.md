@@ -40,9 +40,12 @@ Every type class has:
 | `ColumnType(element_type)` | one column of a table | |
 | `TableType([(name,type), …])` | Apache-Arrow-shaped table | first-class |
 | `FunctionRefType(function, closure_type)` | reference to a `Function` with a captured closure | used for callbacks (e.g. `list.sort`, `table.map`) |
+| `DateType` (`ir.date`) | calendar date | used by `hipy.lib.datetime.date` |
+| `IntervalType` (`ir.interval`) | a time interval / `timedelta` | result of `date - date` |
+| `NullableType(type)` | wraps any type with a possible SQL-style NULL | produced by `hipy/lib/sql.py`; MLIR backend lowers to LingoDB `db.nullable` |
 
 Singletons for the parameterless types are constructed at module load
-(`void, bool, i8, i16, i32, i64, int, f32, f64, string, pyobj`).
+(`void, bool, i8, i16, i32, i64, int, f32, f64, string, pyobj, date, interval`).
 
 ## 2. SSA values, blocks, modules
 

@@ -79,6 +79,26 @@ time).
 
 **`set`** — `set.<op>` builtins; same shape as list/dict.
 
+### 1.2a `_MaybeNone` — optional wrapper for shim return values
+
+Not a Python stdlib type. Introduced by the regex shim (`hipy/lib/re.py`)
+as an `Optional[T]` analogue that can survive HiPy's type system. Stored
+as a `static_object["_isNone", "_val"]` — two fields: the bool flag and
+the wrapped value.
+
+- `__hipy_getattr__(name)` — forwards to `_val.<name>` via
+  `intrinsics.get_attr`; if `_isNone`, emits `call_builtin("error", ...)`
+  to raise a runtime `AttributeError`.
+- `__topython__` — emits `python.get_none` when `_isNone`, else
+  `intrinsics.to_python(_val)`.
+- `__bool__` — `False` iff None, else `bool(_val)`.
+- `__merge__` — only merges with another `_MaybeNone`; mismatched
+  branches raise `NotImplementedError`.
+
+If you need a Python-ish `Optional[T]` in a new shim, copy this pattern
+rather than inventing a new one. The regex `search()` function is the
+canonical consumer.
+
 ### 1.3 Python-side / fallback types
 
 **`object`** — the `pyobj` catch-all (`__HIPY_MUTABLE__=True`, `NESTED=True`).
@@ -107,9 +127,12 @@ list" trick.
 
 `print(*args)` → stringifies + emits `dbg.print`. `repr(val)` tries
 `__hipy__repr__` first (non-fallback), otherwise hands off to CPython.
-`len(v)` delegates to `v.__len__`. `sum(l)`, `min(…)`, `max(…)`, `sorted(…)`
-are all `@hipy.compiled_function`s built on iteration + comparison + list
-append. `ord(c)` constant-folds when `c` is a `_const_str`.
+`len(v)` delegates to `v.__len__`. `sum(l)`, `min(…)`, `max(…)`, `sorted(…)`,
+`abs(x)` are all `@hipy.compiled_function`s built on iteration +
+comparison + list append. `abs` dispatches on `intrinsics.isa(x, int|float)`
+and falls back to `not_implemented()` for other types (so numpy scalars
+don't hit it — they'd need their own branch). `ord(c)` constant-folds
+when `c` is a `_const_str`.
 
 ### 1.6 The CValue → `_super_<op>` fall-through
 
@@ -156,8 +179,27 @@ invoke it per row. See `intrinsics.md §5`.
 
 These are worth skimming as minimal examples of the shim pattern:
 
-- **`hipy/lib/math.py`** (`"math"`) — only `fact` at present, via
-  `intrinsics.call_builtin("math.fact", int, [n])`.
+- **`hipy/lib/math.py`** (`"math"`) — `fact(n)`, `ceil(x)`, `exp`,
+  `sqrt`, `log`, `sin`, `cos`, plus the top-level constants `pi` and
+  `e` (exported as constants so they survive cogen). `fact` is a
+  compiled loop; the rest route through `scalar.float.<name>` builtins.
+  Return type for `ceil` is `int`; the rest return `float`.
+- **`hipy/lib/datetime.py`** (`"datetime"`) — two virtual classes: `date`
+  (IR type `ir.date`) and `timedelta` (IR type `ir.interval`). Currently
+  only `date.__sub__(date)` → `timedelta` (emits `date.diff`) and
+  `timedelta.days` → `int` (emits `interval.days`) are wired up;
+  `__topython__` raises on both. The MLIR backend has partial lowerings
+  to LingoDB's `db.date` / `db.interval`.
+- **`hipy/lib/sql.py`** (`"sql"`) — SQL-integration shim. Two things:
+  (1) `execute(type, query, *params)` — emits `sql.execute` with the
+  user-provided result type (typically a `Nullable[...]` or record type).
+  (2) `Nullable` — a virtual class wrapping `ir.NullableType(element_type)`,
+  with methods `is_null()`, `get_value()`, `get_value_or_default(default)`
+  (routed to `nullable.is_null` / `nullable.get_value` builtins). The
+  helper `nullable(element_type)` returns the `Nullable.NullableType`
+  instance for use as the `type` argument of `execute`. Currently only
+  the MLIR backend handles these builtins (see `docs/mlir-backend.md`);
+  the C++ backend does not implement `sql.execute`.
 - **`hipy/lib/statistics.py`** (`"statistics"`) — `mean`, `stdev` as plain
   compiled functions that iterate the input.
 - **`hipy/lib/pickle.py`** (`"pickle"`) — `loads(data)` uses
@@ -171,6 +213,15 @@ These are worth skimming as minimal examples of the shim pattern:
   computed properties. `urlsplit`/`urlparse` emit `"urllib.parse.urlsplit"`
   builtins; the result types expose `__hipy_getattr__` for `scheme`,
   `netloc`, `username`, etc.
+- **`hipy/lib/re.py`** (`"re"`) — basic regex. `search(pattern, string)`
+  routes to the `regex.search` C++ builtin (wraps `std::regex_search`)
+  for a whitelisted "simple" subset of patterns (literal chars, `\d \w
+  \s`, quantifiers, anchors, `(…)` groups). Anything else calls
+  `intrinsics.not_implemented()` — there is no regex runtime fallback.
+  Returns a `_MaybeNone(Match(...))`; `Match.group(i)` / `Match.span(i)`
+  slice the original string using the (start, end) tuple list the
+  builtin emits. See `todo.md` for the caveats on the "simple regex"
+  detector.
 - **`hipy/lib/scipy/special/__init__.py`** (`"scipy.special"`) — only `erf`.
 - **`hipy/lib/collections/__init__.py`** (`"collections"`) — `namedtuple` is
   a factory: at generation time it synthesizes a fresh
@@ -335,9 +386,11 @@ new backend (these are what you'll be handling in the IR):
 - **Arrays:** `array.create_empty`, `array.fill`, `array.apply_scalar`,
   `array.binary_op`, `array.reshape`, `array.copy`, `array.get`, `array.set`,
   `array.from_nested_list`, `array.dim`.
-- **Misc:** `math.fact`, `urllib.parse.urlsplit`, `random.rand`, `dbg.print`,
-  `try_or_default`, `python.operator.<op>`, `python.create_dict`,
-  `python.create_list`, `python.tuple_from_list`.
+- **Misc:** `math.fact`, `scalar.float.ceil`, `urllib.parse.urlsplit`,
+  `random.rand`, `dbg.print`, `try_or_default`, `try_except`, `while.iter`,
+  `regex.search`, `error` (runtime raise), `python.get_none`,
+  `python.operator.<op>`, `python.create_dict`, `python.create_list`,
+  `python.tuple_from_list`.
 
 Backends must implement every `fn_name` a user's program can reach. A new
 builtin introduced by a shim needs a matching handler in the C++ backend

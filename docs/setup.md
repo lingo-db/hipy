@@ -118,11 +118,21 @@ single function in a user file. No executable — the MLIR is printed
 (or written to the optional fourth argument).
 
 ```
-python compile.py <file> <function> <arg_types_json> [<output_file>]
+python compile.py <file> <function> <arg_types_json> [function_suffix] [fallback|no_fallback] [output_file]
 ```
 
-`arg_types_json` is a JSON list of `"str"` / `"int"` / `"float"`
-(see `compile.py:24-33` for the full set).
+`arg_types_json` is a JSON list of `"str"` / `"int"` / `"float"` / `"date"`
+(see `compile.py:33-45` for the full set).
+
+- `function_suffix` — sets `hipy.config.function_suffix` (prepended with
+  an underscore) so generated function names can be disambiguated when
+  compiling several variants into the same module. See `compile.py:23`.
+- `fallback` (default) vs `no_fallback` — toggles whether
+  `hipy.compiler.compile(..., fallback=...)` is allowed to insert the
+  generic Python-fallback path. `compile.py:21`.
+- Any input `<file>` not ending in `.py` is copied to a sibling `.py`
+  path before `importlib` loads it (`compile.py:47-54`) so hosts that
+  pass unextensioned files still work.
 
 Example (validated):
 

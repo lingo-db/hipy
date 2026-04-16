@@ -144,6 +144,8 @@ case in the rewriter's table. Non-exhaustive list:
 | `constant(val)` | Wrap a Python constant in a `_const_<type>` virtual value. |
 | `create_tuple / create_list / create_dict / create_dict_simple / create_slice` | Build virtual aggregate values. `create_list` logs `NestedValueAlias` events for every element. |
 | `create_lambda(staged, bind_python, bind_staged)` | Wraps the 3-variant lambda into a `LambdaValue`. |
+| `generator_expr(iter_fn, iterable, type_infer_fn, packed_vals)` | Packages the helper functions the rewriter emitted for a `(... for ... in ...)` expression into a `GeneratorExpressionValue`. `packed_vals` is a tuple of the free variables read by the element expression (so the generator body can reconstruct its closure). The iter fn is always wrapped as an `HLCFunction`. |
+| `infer_return_type(fn, arg_types_input)` | Runs `fn(*fake_args)` inside an **aborted** `transaction()` to read the return type without emitting IR. Inputs are a `_concrete_list` of `TypeValue`/`HLCClassValue`. Used by `GeneratorExpressionValue.__itertype__` and similar "what would this call return?" probes. |
 | `get_by_name / get_recursive_raw / get_attr / set_attr / get_item / set_item` | Name and attribute resolution. `get_by_name` is also where Python modules and HiPy-mocked libs are wired in (see `mocked_modules` map), and where functions in the **base module** have their source registered into `module.py_functions` for the fallback. |
 | `perform_call(fn, args, kwargs)` | Core dispatch. Handles `HLCFunction`, `HLCMethod`, `HLCClassValue`, `LambdaValue`, `Value(__call__)`, and falls back to `pyobj` on failure. |
 | `perform_binop / perform_unaryop` | Binary/unary operators — retries with reversed method, then converts to pyobj on failure. |

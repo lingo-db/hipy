@@ -66,7 +66,9 @@ constant/list/tuple/dict of constants into a plain Python value (or
 | Function | Purpose |
 |---|---|
 | `to_python(value)` | Force `value` to its `pyobj` form. Same as `context.to_python` but wrapped as a library-friendly call. |
+| `annotate_object_abstract_path(value, abstract_path)` | Tag a `pyobj` value (an `hipy.lib.builtins.object`) with a constant string path. Used by MLIR lowering to stash the original dotted Python path of a fallback-imported module so the backend can re-resolve it without scanning imports. |
 | `import_pymodule(name)` | Emits `ir.PyImport` and wraps the result as a `pyobj`. Useful for library code that needs to import a CPython module without having a corresponding HiPy shim. |
+| `get_attr(obj, name)` | Dynamic-attribute access dispatched at generation time — `name` must be a constant string `CValue`. Resolves via the usual `_context.get_attr` path (not a runtime pyobj attr). Used by virtual types that forward attribute access to an inner value (e.g. `_MaybeNone.__hipy_getattr__`). |
 | `track_nested(nested, container)` | Explicit `NestedValueAlias` event. Use when you build a composite value whose components should share the container's escape fate. |
 | `reinterpret(value, return_type)` | **Hard cast** — take the value's IR SSA as-is and re-wrap it as `return_type`. Requires the IR types to be compatible; use sparingly (ABI casts, cross-lib interop). |
 | `undef(type)` | Emit `ir.Undef` of the given type and wrap. Useful for placeholder results in conditionals where one branch doesn't produce a meaningful value. |
