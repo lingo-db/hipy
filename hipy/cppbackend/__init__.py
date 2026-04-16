@@ -171,6 +171,10 @@ class CPPBackend:
             case ir.TableType():
                 self.enable_arrow |= True
                 return f"std::shared_ptr<builtin::tabular::Table>"
+            case ir.DateType():
+                return "int64_t"
+            case ir.IntervalType():
+                return "int64_t"
             case ir.FunctionRefType(arg_types=arg_types, res_type=res_type, closure_type=closure_type):
                 if closure_type is None:
                     return f"std::add_pointer<{self.generate_type(res_type)}({', '.join(map(self.generate_type, arg_types))})>::type"
@@ -951,6 +955,72 @@ class CPPBackend:
                 return f"{self.generate_result(op.result)} = builtin::date::extractHour({self.generate_value(op.args[0])});"
             case "date.get_year":
                 return f"{self.generate_result(op.result)} = builtin::date::extractYear({self.generate_value(op.args[0])});"
+            case "date.get_month":
+                return f"{self.generate_result(op.result)} = builtin::date::extractMonth({self.generate_value(op.args[0])});"
+            case "date.get_day":
+                return f"{self.generate_result(op.result)} = builtin::date::extractDay({self.generate_value(op.args[0])});"
+            case "date.from_ymd":
+                return f"{self.generate_result(op.result)} = builtin::date::fromYMD({self.generate_value(op.args[0])}, {self.generate_value(op.args[1])}, {self.generate_value(op.args[2])});"
+            case "date.today":
+                return f"{self.generate_result(op.result)} = builtin::date::today();"
+            case "date.from_isoformat":
+                return f"{self.generate_result(op.result)} = builtin::date::fromIsoFormat({self.generate_value(op.args[0])});"
+            case "date.diff":
+                return f"{self.generate_result(op.result)} = builtin::date::diff({self.generate_value(op.args[0])}, {self.generate_value(op.args[1])});"
+            case "date.add_interval":
+                return f"{self.generate_result(op.result)} = builtin::date::addInterval({self.generate_value(op.args[0])}, {self.generate_value(op.args[1])});"
+            case "date.sub_interval":
+                return f"{self.generate_result(op.result)} = builtin::date::subInterval({self.generate_value(op.args[0])}, {self.generate_value(op.args[1])});"
+            case "date.to_string":
+                return f"{self.generate_result(op.result)} = builtin::date::toString({self.generate_value(op.args[0])});"
+            case "date.weekday":
+                return f"{self.generate_result(op.result)} = builtin::date::weekday({self.generate_value(op.args[0])});"
+            case "date.isoweekday":
+                return f"{self.generate_result(op.result)} = builtin::date::isoWeekday({self.generate_value(op.args[0])});"
+            case "date.toordinal":
+                return f"{self.generate_result(op.result)} = builtin::date::toOrdinal({self.generate_value(op.args[0])});"
+            case "date.compare.eq":
+                return f"{self.generate_result(op.result)} = builtin::date::eq({self.generate_value(op.args[0])}, {self.generate_value(op.args[1])});"
+            case "date.compare.neq":
+                return f"{self.generate_result(op.result)} = builtin::date::neq({self.generate_value(op.args[0])}, {self.generate_value(op.args[1])});"
+            case "date.compare.lt":
+                return f"{self.generate_result(op.result)} = builtin::date::lt({self.generate_value(op.args[0])}, {self.generate_value(op.args[1])});"
+            case "date.compare.lte":
+                return f"{self.generate_result(op.result)} = builtin::date::lte({self.generate_value(op.args[0])}, {self.generate_value(op.args[1])});"
+            case "date.compare.gt":
+                return f"{self.generate_result(op.result)} = builtin::date::gt({self.generate_value(op.args[0])}, {self.generate_value(op.args[1])});"
+            case "date.compare.gte":
+                return f"{self.generate_result(op.result)} = builtin::date::gte({self.generate_value(op.args[0])}, {self.generate_value(op.args[1])});"
+            case "interval.from_days_seconds":
+                return f"{self.generate_result(op.result)} = builtin::interval::fromDaysSeconds({self.generate_value(op.args[0])}, {self.generate_value(op.args[1])});"
+            case "interval.days":
+                return f"{self.generate_result(op.result)} = builtin::interval::days({self.generate_value(op.args[0])});"
+            case "interval.seconds":
+                return f"{self.generate_result(op.result)} = builtin::interval::seconds({self.generate_value(op.args[0])});"
+            case "interval.total_seconds":
+                return f"{self.generate_result(op.result)} = builtin::interval::totalSeconds({self.generate_value(op.args[0])});"
+            case "interval.add":
+                return f"{self.generate_result(op.result)} = builtin::interval::add({self.generate_value(op.args[0])}, {self.generate_value(op.args[1])});"
+            case "interval.sub":
+                return f"{self.generate_result(op.result)} = builtin::interval::sub({self.generate_value(op.args[0])}, {self.generate_value(op.args[1])});"
+            case "interval.neg":
+                return f"{self.generate_result(op.result)} = builtin::interval::neg({self.generate_value(op.args[0])});"
+            case "interval.is_nonzero":
+                return f"{self.generate_result(op.result)} = builtin::interval::isNonzero({self.generate_value(op.args[0])});"
+            case "interval.to_string":
+                return f"{self.generate_result(op.result)} = builtin::interval::toString({self.generate_value(op.args[0])});"
+            case "interval.compare.eq":
+                return f"{self.generate_result(op.result)} = builtin::interval::eq({self.generate_value(op.args[0])}, {self.generate_value(op.args[1])});"
+            case "interval.compare.neq":
+                return f"{self.generate_result(op.result)} = builtin::interval::neq({self.generate_value(op.args[0])}, {self.generate_value(op.args[1])});"
+            case "interval.compare.lt":
+                return f"{self.generate_result(op.result)} = builtin::interval::lt({self.generate_value(op.args[0])}, {self.generate_value(op.args[1])});"
+            case "interval.compare.lte":
+                return f"{self.generate_result(op.result)} = builtin::interval::lte({self.generate_value(op.args[0])}, {self.generate_value(op.args[1])});"
+            case "interval.compare.gt":
+                return f"{self.generate_result(op.result)} = builtin::interval::gt({self.generate_value(op.args[0])}, {self.generate_value(op.args[1])});"
+            case "interval.compare.gte":
+                return f"{self.generate_result(op.result)} = builtin::interval::gte({self.generate_value(op.args[0])}, {self.generate_value(op.args[1])});"
             case "scalar.float.isnan":
                 return f"{self.generate_result(op.result)} = std::isnan({self.generate_value(op.args[0])});"
             
