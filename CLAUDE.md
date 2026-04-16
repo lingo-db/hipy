@@ -1,0 +1,78 @@
+# HiPy — knowledge base for Claude
+
+This repo has a dedicated documentation tree at **`docs/`** that was
+written to brief you on the codebase. Consult it before exploring the
+source tree blindly — every major component has a doc page with the
+relevant file paths, extension seams, and gotchas.
+
+Also at the repo root: **`hipy_paper.md`** — a condensed summary of the
+OOPSLA'24 paper that is HiPy's scientific foundation. Read it first if
+you need the *why* behind a design decision.
+
+## How to navigate the knowledge base
+
+Start at **`docs/index.md`** — it lists every doc file and the suggested
+reading order. The docs are organized by logical component:
+
+| Doc | What it covers |
+|---|---|
+| `docs/index.md` | Index + reading order |
+| `docs/setup.md` | **How to build + run** — venv, pyarrow symlinks, CMake, env vars, `pytest`, `compile.py`. Go here first if the repo isn't built yet on this machine. |
+| `docs/extending.md` | **How to add things** — shims, virtual types, IR builtins, passes, backends. Go here first when the task is "add X". |
+| `docs/ir.md` | IR types, SSA, ops, modules |
+| `docs/compiler.md` | AST rewrite (cogen) + IR-gen loop |
+| `docs/context.md` | `GeneratorContext` runtime |
+| `docs/value.md` | Virtual-object model |
+| `docs/intrinsics.md` | Library-author API |
+| `docs/runtime-glue.md` | Decorators, closures, test helpers |
+| `docs/standard-library.md` | Every `hipy/lib/` shim |
+| `docs/optimizations.md` | Passes in `hipy/opt/` including dccg |
+| `docs/cpp-backend.md` | IR → C++ + Arrow runtime |
+| `docs/mlir-backend.md` | Prototype MLIR backend (stub) |
+| `docs/tests.md` | Test layout + `check_prints` idiom |
+
+Each doc ends with a **Gotchas** section capturing non-obvious
+invariants. When a test fails unexpectedly or an edit breaks something,
+check the gotchas first.
+
+## Quick-start (assuming setup is done)
+
+Two env vars must be set in every shell that runs `pytest` or
+`compile.py` (see `docs/setup.md` for first-time setup):
+
+```bash
+source .venv/bin/activate
+export HIPY_STANDALONE_SOURCE=$(pwd)/cppbackend
+export HIPY_STANDALONE_BUILD=/tmp/hipy-generator   # or wherever you configured CMake
+export PYTHONPATH=".:$PYTHONPATH"
+
+pytest test                                        # full test suite (C++ backend)
+pytest test/test_hello_world.py                    # single file
+python compile.py <file> <fn> '["int"]'            # MLIR dump for one function
+```
+
+If `pytest` hangs on the first test, `HIPY_STANDALONE_BUILD` is unset
+or points to a non-configured directory — see `docs/setup.md §4`.
+
+## Workflow hints
+
+- **Setting up a fresh checkout**: follow `docs/setup.md` end-to-end
+  before anything else. Missing env vars are the #1 cause of spurious
+  test failures.
+- **New feature / bugfix**: skim the relevant component doc(s), then
+  look at the source. The docs point to specific files and often
+  specific methods.
+- **Adding a library shim, virtual type, IR builtin, or optimization
+  pass**: `docs/extending.md` is a cookbook — follow the checklist there.
+- **Writing tests**: `docs/tests.md` describes the `check_prints` idiom
+  and the `not_constant(...)` pattern used to defeat constant folding.
+- **Debugging a compile error from the C++ backend**: `docs/cpp-backend.md`
+  explains the CMake / pybind11 / Arrow setup and where the generated
+  source lands.
+
+## Keeping the docs fresh
+
+If a change makes a doc inaccurate (renamed function, new IR op,
+changed pipeline ordering), update the doc in the same change. See the
+*Maintenance notes* section at the bottom of `docs/index.md` for a
+quick mapping from change type to doc file.
