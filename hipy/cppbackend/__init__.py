@@ -1025,6 +1025,12 @@ class CPPBackend:
                 return f"{self.generate_result(op.result)} = std::isnan({self.generate_value(op.args[0])});"
             case "scalar.float.neg":
                 return f"{self.generate_result(op.result)} = -{self.generate_value(op.args[0])};"
+            case "scalar.float.round":
+                val = self.generate_value(op.args[0])
+                ndigits = self.generate_value(op.args[1])
+                if op.result.type == ir.f64:
+                    return f"{self.generate_result(op.result)} = std::round({val} * std::pow(10.0, {ndigits})) / std::pow(10.0, {ndigits});"
+                return f"{self.generate_result(op.result)} = (int64_t)std::round({val});"
             
             # Regex support - native C++ for simple patterns, Python fallback for complex ones
             case "regex.search":

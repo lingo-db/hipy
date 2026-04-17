@@ -2534,6 +2534,15 @@ def format(value, formatspec=""):
     return _format_internal(value, formatspec)
 
 
+@hipy.raw
+def _round_via_dunder(value, ndigits, _context):
+    try:
+        with _context.no_fallback():
+            return _context.perform_call(_context.get_attr(value, "__round__"), [ndigits])
+    except (NotImplementedError, AttributeError) as e:
+        raise NotImplementedError("Cannot round") from e
+
+
 @hipy.compiled_function
 def round(value, ndigits=None):
     if intrinsics.isa(value, float):
@@ -2548,7 +2557,7 @@ def round(value, ndigits=None):
             intrinsics.not_implemented()
             return value
     else:
-        intrinsics.not_implemented()
+        return _round_via_dunder(value, ndigits)
 
 
 @hipy.classdef

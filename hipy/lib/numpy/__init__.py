@@ -144,6 +144,10 @@ class int64(Value):
     def __int__(self):
         return intrinsics.call_builtin("scalar.int.int64_to_pyint", int, [self])
 
+    @hipy.compiled_function
+    def __round__(self, ndigits=None):
+        return round(int(self), ndigits)
+
     def __merge__(self, other, self_fn, other_fn, context):
         if isinstance(other.value, int64):
             return self, other, lambda val: int64(val)
@@ -230,6 +234,10 @@ class float64(Value):
     @hipy.compiled_function
     def __int__(self):
         return intrinsics.call_builtin("scalar.float.to_int", int, [self])
+
+    @hipy.compiled_function
+    def __round__(self, ndigits=None):
+        return round(float(self), ndigits)
 
     @hipy.compiled_function
     def __add__(self, other):
