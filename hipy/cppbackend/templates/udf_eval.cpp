@@ -34,7 +34,9 @@ int main(){
     {{init_python}}
     #endif
     #if ARROW_ENABLED==1
+    #if PY_ENABLED==1
     arrow::py::import_pyarrow();
+    #endif
     arrow::compute::Initialize().ok();
     #endif
         {{global_py_init}}

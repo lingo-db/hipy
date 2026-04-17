@@ -1164,8 +1164,8 @@ class CPPBackend:
         for name, el in self.module.py_functions.items():
             python_init += f'py::eval<pybind11::eval_single_statement>("{self.escape_for_cpp(el)}");\n'
         method_definitions = self.generate_module(self.module)
-        self.enable_python |= self.enable_arrow
-        self.enable_python |= self.enable_numpy
+        if self.module.imports or self.module.py_functions:
+            self.enable_python = True
         return {"method_definitions": method_definitions,
                 "fn": self.fn_name,
                 "init_python": python_init,
