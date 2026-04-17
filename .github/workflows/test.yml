@@ -18,7 +18,7 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: |
-          apt update && apt install -y ccache
+          apt update && apt install -y ccache lld
           python3 -m venv ${{ github.workspace }}/venv
           echo "${{ github.workspace }}/venv/bin" >> $GITHUB_PATH
           source ${{ github.workspace }}/venv/bin/activate

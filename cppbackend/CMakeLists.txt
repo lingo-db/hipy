@@ -4,6 +4,10 @@ project(standalone)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_COMPILER_LAUNCHER ccache)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
+find_program(LLD_LINKER ld.lld)
+if(LLD_LINKER)
+    add_link_options(-fuse-ld=lld)
+endif()
 execute_process(
         COMMAND ${PYTHON_EXECUTABLE} -c "import pyarrow as pa; print(pa.get_include())"
         OUTPUT_VARIABLE PATH_OUTPUT
