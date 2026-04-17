@@ -30,6 +30,7 @@ int main(){
     #endif
     #if ARROW_ENABLED==1
     arrow::py::import_pyarrow();
+    arrow::compute::Initialize().ok();
     #endif
     {{global_py_init}}
     {{fn}}();

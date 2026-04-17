@@ -33,5 +33,5 @@ find_package(pybind11 REQUIRED PATHS ${Pybind11_DIR})
 
 add_executable(standalone standalone.cpp)
 target_include_directories(standalone PRIVATE ${PYARROW_INCLUDE_PATH})
-target_link_libraries(standalone PRIVATE pybind11::embed arrow_python arrow)
+target_link_libraries(standalone PRIVATE pybind11::embed arrow_python arrow_compute arrow)
 target_link_directories(standalone PRIVATE ${PYARROW_LIB_PATH})
