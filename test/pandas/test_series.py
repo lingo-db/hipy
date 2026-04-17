@@ -47,7 +47,7 @@ dtype: float64
 0    1
 1    2
 2    3
-dtype: object
+dtype: str
 """)
 
 

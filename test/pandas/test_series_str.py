@@ -17,7 +17,7 @@ def test_slice():
 1    b
 2    c
 3    d
-dtype: object""")
+dtype: str""")
 
 @hipy.compiled_function
 def fn_lower():
@@ -31,7 +31,7 @@ def test_lower():
 1      b
 2      c
 3    xd 
-dtype: object""")
+dtype: str""")
 @hipy.compiled_function
 def fn_contains():
     df = pd.DataFrame.from_dict({"str": ['hello', 'world', 'hallo', 'welt ']})

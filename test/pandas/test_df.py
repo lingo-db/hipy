@@ -47,7 +47,7 @@ a      0  0.0  a
 b      1  1.1  b
 c      2  2.2  c
 d      3  3.3  d
-Index(['a', 'b', 'c', 'd'], dtype='object', name='index')
+Index(['a', 'b', 'c', 'd'], dtype='str', name='index')
 """)
 
 @hipy.compiled_function
@@ -224,11 +224,11 @@ a    a      1\\nb    0.0\\nc      a\\nName: a, dtype: object
 b    a      0\\nb    1.1\\nc      b\\nName: b, dtype: object
 c    a      2\\nb    2.2\\nc      c\\nName: c, dtype: object
 d    a      3\\nb    3.3\\nc      d\\nName: d, dtype: object
-dtype: object
+dtype: str
 index
 a    1_0.0_a
 b    0_1.1_b
 c    2_2.2_c
 d    3_3.3_d
-dtype: object
+dtype: str
     """)
