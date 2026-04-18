@@ -66,3 +66,48 @@ that no longer accepts it under pandas 3.x.
 **Fix sketch:** in the Series-from-groupby topython path, stop passing
 `dtype=` to `MultiIndex.__new__` (pandas 3.x removed that kwarg).
 
+---
+
+## 4. `str.format(...)` fallback breaks on pyobj-method lookup
+
+**Location:** `hipy/lib/builtins.py:1372-1380` — `_const_str.format` is a
+`@hipy.compiled_function` whose body calls the hipy-internal raw method
+`self._const_str__get_format_parts()` (name-mangled from
+`__get_format_parts`). When the inner parser raises
+`NotImplementedError` (e.g. for `"{:n}"` or `"{:=8d}"`), the ambient
+fallback converts the receiver to `pyobj` and re-runs the method call.
+The retry still goes through `self._const_str__get_format_parts()` — now
+on a `pyobj`, which has no such attribute — and the `object.__call__`
+machinery ends up doing a typeshed lookup for
+`builtins.str.__get_format_parts`, which doesn't exist:
+
+    KeyError: '__get_format_parts'
+    # (or ModuleNotFoundError: typeshed_client, if not installed)
+
+**Contrast with `str.__mod__`:** `"%X" % arg` works because `%` is a
+binary operator — `perform_binop` falls back through
+`python.operator.mod`, a direct pyobj builtin that doesn't need typeshed.
+Only method-call fallback is affected.
+
+**Reproducer:** `test/test_fallback_coverage.py::test_format_locale_n_falls_back`
+and `::test_format_sign_aware_align_falls_back` (both xfail).
+
+    "{:n}".format(42)      # fallback-path KeyError
+    "{:=8d}".format(-42)   # fallback-path KeyError
+
+**Fix sketch:** have `_const_str.format` fast-path to pyobj
+(`intrinsics.to_python(self).format(*args)` with direct `str.format`
+dispatch) when `_const_str__get_format_parts` would raise — or make
+`format`/`__mod__` `@raw` methods that handle the NotImplementedError
+themselves and invoke a dedicated pyobj builtin `python.operator.format`.
+
+---
+
+## Optional dependency: `typeshed_client`
+
+Several fallback paths (e.g. `str.__mod__` with an unsupported format
+specifier) use `hipy/lib/builtins.py:103` to infer pyobj method return
+types from typeshed stubs. Without `typeshed_client` installed, those
+paths raise `ModuleNotFoundError` at generation time. The test harness
+now installs `typeshed_client` in CI (`.github/workflows/test.yml`) so
+these paths are exercised.
