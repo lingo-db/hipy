@@ -138,7 +138,6 @@ def fn_pyobj_pow_fallback():
     print(a ** e)
 
 
-@pytest.mark.xfail(reason="python.operator.pow not implemented in C++ backend")
 def test_pyobj_pow_fallback():
     check_prints(fn_pyobj_pow_fallback, """
 1024

@@ -515,6 +515,8 @@ class CPPBackend:
                 return binary_op(lambda x, y: f"{x}/{y}")
             case "python.operator.mod":
                 return binary_op(lambda x, y: f"{x}%{y}")
+            case "python.operator.pow":
+                return binary_op(lambda x, y: f"py::reinterpret_steal<py::object>(PyNumber_Power(({x}).ptr(),({y}).ptr(),Py_None))")
             case "python.operator.contains":
                 return binary_op(lambda x, y: f"{x}.contains({y})")
             case "dict.create":
