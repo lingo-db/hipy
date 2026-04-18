@@ -21,23 +21,19 @@ default formatter for the argument.
 
 ---
 
-## 2. `str.__mod__` does not unpack a tuple RHS
+## 2. `str.__mod__` does not unpack a tuple RHS — **FIXED**
 
-**Location:** `hipy/lib/builtins.py:1382-1390` — `_const_str.__mod__`.
+**Was:** `hipy/lib/builtins.py` — `_const_str.__mod__`.
 
-`"%d %d" % (1, 2)` passes the tuple `(1, 2)` as the single positional
-`__mod__` arg. `__mod__(self, *args)` receives `args = ((1, 2),)`
-and indexes `args[1]`, raising `IndexError`.
+`"%d %d" % (1, 2)` passed the tuple `(1, 2)` as the single positional
+`__mod__` arg, so `args = ((1, 2),)` and `args[1]` raised `IndexError`.
+Python's real `%` unpacks a tuple RHS into positional args; HiPy did
+not.
 
-Python's real `%` unpacks a tuple RHS automatically; HiPy's
-implementation does not.
+**Fix:** `_const_str.__mod__` now detects a single-arg tuple RHS and
+unpacks it before indexing.
 
-**Reproducer:** `test/test_string_format.py::test_percent_escape_and_multiple` (xfail).
-
-    "100%% of %d is %d" % (50, 50)   # IndexError: tuple index out of range
-
-**Fix sketch:** in `__mod__`, detect a tuple RHS (single arg that is a
-tuple) and treat it as positional args.
+**Regression test:** `test/test_string_format.py::test_percent_tuple_rhs`.
 
 ---
 

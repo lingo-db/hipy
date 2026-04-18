@@ -1382,11 +1382,19 @@ class _const_str(CValue, str):
 
     @hipy.compiled_function
     def __mod__(self, *args):
+        # Python's `%` unpacks a tuple RHS into positional args; e.g.
+        # `"%d %d" % (1, 2)` is equivalent to `"%d %d".__mod__(1, 2)`. The
+        # compiled-function path receives the tuple wrapped as a single
+        # positional, so unwrap it here.
+        if args.__len__() == 1 and intrinsics.isa(args[0], tuple):
+            real_args = args[0]
+        else:
+            real_args = args
         literals, cpp_specs = self._const_str__get_percentage_format_parts()
         len = cpp_specs.__len__()
         res = literals[0]
         for i in range(len):
-            res += intrinsics.call_builtin("scalar.string.format_single", str, [cpp_specs[i], args[i]])
+            res += intrinsics.call_builtin("scalar.string.format_single", str, [cpp_specs[i], real_args[i]])
             res += literals[i + 1]
         return res
 

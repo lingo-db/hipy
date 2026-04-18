@@ -6,8 +6,6 @@ in `hipy/lib/builtins.py`. The entire format-string parser was previously
 untested — each `check_prints` below walks a specific branch of the parser.
 """
 
-import pytest
-
 import hipy
 from hipy.interpreter import check_prints
 from hipy.test_utils import not_constant
@@ -201,7 +199,6 @@ def fn_percent_tuple_rhs():
     print("100%% of %d is %d" % (not_constant(50), not_constant(50)))
 
 
-@pytest.mark.xfail(reason="tuple RHS is not unpacked — see bugs-with-increased-cov.md #2")
 def test_percent_tuple_rhs():
     check_prints(fn_percent_tuple_rhs, """
 100% of 50 is 50
