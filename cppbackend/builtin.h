@@ -41,6 +41,19 @@ namespace builtin {
         std::cout << arg << std::endl;
     }
 
+    inline int64_t floordiv(int64_t a, int64_t b) {
+        int64_t q = a / b;
+        int64_t r = a % b;
+        if (r != 0 && ((r < 0) != (b < 0))) q -= 1;
+        return q;
+    }
+
+    inline int64_t floormod(int64_t a, int64_t b) {
+        int64_t r = a % b;
+        if (r != 0 && ((r < 0) != (b < 0))) r += b;
+        return r;
+    }
+
     template<class X>
     inline std::string float_to_string(X arg) {
         std::stringstream ss;

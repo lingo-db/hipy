@@ -201,7 +201,6 @@ def fn_int_floordiv():
     print(not_constant(10) // not_constant(3))
 
 
-@pytest.mark.xfail(reason="scalar.int.div uses C-style truncation; Python floor division requires -7//2 == -4 but currently returns -3")
 def test_int_floordiv():
     check_prints(fn_int_floordiv, """
 3

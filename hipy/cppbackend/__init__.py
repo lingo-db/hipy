@@ -255,9 +255,9 @@ class CPPBackend:
             case "scalar.int.mul":
                 return binary_op(lambda x, y: f"{x}*{y}")
             case "scalar.int.div":
-                return binary_op(lambda x, y: f"{x}/{y}")
+                return binary_op(lambda x, y: f"builtin::floordiv({x},{y})")
             case "scalar.int.mod":
-                return binary_op(lambda x, y: f"{x}%{y}")
+                return binary_op(lambda x, y: f"builtin::floormod({x},{y})")
             case "scalar.int.xor":
                 return binary_op(lambda x, y: f"{x}^{y}")
             case "scalar.int.and":
