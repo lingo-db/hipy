@@ -163,3 +163,67 @@ def test_to_datetime_series():
 1    2023
 dtype: int64
 """)
+
+
+@hipy.compiled_function
+def fn_series_str_upper():
+    # Series.str.upper → hipy/lib/pandas:783-784 (uncovered).
+    df = pd.DataFrame.from_dict({"str": ['Abc', 'xY', 'z']})
+    print(df['str'].str.upper())
+
+
+def test_series_str_upper():
+    check_prints(fn_series_str_upper, """
+0    ABC
+1     XY
+2      Z
+dtype: str""")
+
+
+@hipy.compiled_function
+def fn_series_dt_year():
+    # Series.dt.year — hipy/lib/pandas:813-815 (_DateMethods.__hipy_getattr__).
+    df = pd.DataFrame.from_dict({"d": [pd.Timestamp("2020-01-02"),
+                                       pd.Timestamp("2024-12-31")]})
+    print(df['d'].dt.year)
+
+
+def test_series_dt_year():
+    check_prints(fn_series_dt_year, """
+0    2020
+1    2024
+dtype: int64
+""")
+
+
+@hipy.compiled_function
+def fn_timestamp_hour():
+    # Timestamp.hour — hipy/lib/pandas:1183-1184. Uses the date.get_hour builtin.
+    ts = pd.Timestamp("2024-05-16")
+    print(ts.hour)
+
+
+def test_timestamp_hour():
+    check_prints(fn_timestamp_hour, """
+0
+""")
+
+
+@hipy.compiled_function
+def fn_merge_left_right_index():
+    # merge(..., left_index=True, right_index=True) — hipy/lib/pandas:727-732.
+    # Joins on both frames' index columns instead of a `on=` column. We
+    # construct the frames with the default RangeIndex so the join key is
+    # the positional index.
+    left = pd.DataFrame({"lv": [10, 20, 30]})
+    right = pd.DataFrame({"rv": [100, 200, 300]})
+    print(pd.merge(left, right, left_index=True, right_index=True))
+
+
+def test_merge_left_right_index():
+    check_prints(fn_merge_left_right_index, """
+   lv   rv
+0  10  100
+1  20  200
+2  30  300
+""")

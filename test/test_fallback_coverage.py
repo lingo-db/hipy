@@ -223,3 +223,36 @@ def test_dict_setitem_type_mismatch_falls_back():
     check_prints(fn_dict_setitem_type_mismatch_falls_back, """
 {'a': 1, 'b': 2.5}
 """, fallback=True)
+
+
+@hipy.compiled_function
+def fn_timedelta_mul_int_falls_back():
+    # timedelta * int — hipy's timedelta has no __mul__ at all, so the
+    # binop dispatcher hits AttributeError and the fallback re-runs the op
+    # with both sides as pyobj. CPython: timedelta(5) * 3 == timedelta(15).
+    t = datetime.timedelta(days=5)
+    k = not_constant(3)
+    print(t * k)
+
+
+def test_timedelta_mul_int_falls_back():
+    check_prints(fn_timedelta_mul_int_falls_back, """
+15 days, 0:00:00
+""", fallback=True)
+
+
+@hipy.compiled_function
+def fn_timedelta_truediv_int_falls_back():
+    # timedelta / int — hipy has no __truediv__ on timedelta; fallback should
+    # produce timedelta(days=2). CPython: timedelta(days=6) / 3 == timedelta(days=2).
+    t = datetime.timedelta(days=6)
+    k = not_constant(3)
+    print(t / k)
+
+
+def test_timedelta_truediv_int_falls_back():
+    check_prints(fn_timedelta_truediv_int_falls_back, """
+2 days, 0:00:00
+""", fallback=True)
+
+
