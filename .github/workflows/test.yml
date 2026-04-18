@@ -18,9 +18,10 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: |
-          echo "deb http://deb.debian.org/debian bookworm-backports main" > /etc/apt/sources.list.d/backports.list
+          echo "deb http://deb.debian.org/debian trixie main" > /etc/apt/sources.list.d/trixie.list
+          printf 'Package: *\nPin: release n=bookworm\nPin-Priority: 900\n\nPackage: *\nPin: release n=trixie\nPin-Priority: 100\n' > /etc/apt/preferences.d/pin-trixie
           apt update && apt install -y ccache lld
-          apt install -y -t bookworm-backports gcc-13 g++-13
+          apt install -y -t trixie gcc-13 g++-13
           echo "CC=gcc-13" >> $GITHUB_ENV
           echo "CXX=g++-13" >> $GITHUB_ENV
           python3 -m venv ${{ github.workspace }}/venv
