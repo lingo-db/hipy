@@ -172,7 +172,6 @@ def fn_int_bitwise_abstract():
     print(a << not_constant(2))
 
 
-@pytest.mark.xfail(reason="scalar.int.lshift not implemented in C++ backend — int.__lshift__ broken for abstract operands")
 def test_int_bitwise_abstract():
     check_prints(fn_int_bitwise_abstract, """
 8

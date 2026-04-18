@@ -260,6 +260,14 @@ class CPPBackend:
                 return binary_op(lambda x, y: f"{x}%{y}")
             case "scalar.int.xor":
                 return binary_op(lambda x, y: f"{x}^{y}")
+            case "scalar.int.and":
+                return binary_op(lambda x, y: f"{x}&{y}")
+            case "scalar.int.or":
+                return binary_op(lambda x, y: f"{x}|{y}")
+            case "scalar.int.lshift":
+                return binary_op(lambda x, y: f"{x}<<{y}")
+            case "scalar.int.rshift":
+                return binary_op(lambda x, y: f"{x}>>{y}")
             case "scalar.int.compare.lt":
                 return binary_op(lambda x, y: f"{x}<{y}")
             case "scalar.int.compare.gt":
