@@ -171,7 +171,10 @@ class MultiIndex(Value):
 
     @hipy.compiled_function
     def __topython__(self):
-        return pd.MultiIndex(self._cols, name=self.names, dtype=self.dtype)
+        # pandas 3.x's MultiIndex() constructor no longer accepts the
+        # positional arrays form nor the `dtype=` kwarg. Use from_arrays,
+        # which takes a list of arrays plus `names`.
+        return pd.MultiIndex.from_arrays(self._cols, names=self.names)
 
     @hipy.compiled_function
     def __hipy__repr__(self):

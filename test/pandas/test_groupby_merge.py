@@ -7,7 +7,6 @@ suite. Each test below is targeted at one of those code paths.
 
 import pandas as _pd
 import pandas as pd
-import pytest
 
 import hipy
 import hipy.lib.pandas
@@ -131,7 +130,6 @@ def fn_groupby_series_nunique():
     print(df.groupby(["k"])["v"].nunique())
 
 
-@pytest.mark.xfail(reason="Series from groupby()[col].nunique() trips MultiIndex dtype kwarg — see bugs-with-increased-cov.md #3")
 def test_groupby_series_nunique():
     check_prints(fn_groupby_series_nunique, """
 k

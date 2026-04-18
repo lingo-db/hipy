@@ -37,26 +37,21 @@ unpacks it before indexing.
 
 ---
 
-## 3. `df.groupby(by)[col].nunique()` trips `MultiIndex.__new__() got an unexpected keyword argument 'dtype'`
+## 3. `df.groupby(by)[col].nunique()` trips `MultiIndex.__new__() got an unexpected keyword argument 'dtype'` — **FIXED**
 
-**Location:** `hipy/lib/pandas/__init__.py` — `DataFrameGroupBySeriesGroupBy.nunique`
-(around line 301) combined with the eventual `__topython__` /
-`print` conversion path. The standalone binary aborts with:
+**Was:** `hipy/lib/pandas/__init__.py` — `MultiIndex.__topython__` called
+`pd.MultiIndex(self._cols, name=self.names, dtype=self.dtype)`. pandas
+3.x's `MultiIndex()` constructor no longer accepts `dtype=`, so the
+pybind materialization of any Series backed by a MultiIndex (including
+the result of `df.groupby(by)[col].nunique()`) aborted with:
 
-    terminate called after throwing an instance of 'pybind11::error_already_set'
-      what():  TypeError: MultiIndex.__new__() got an unexpected keyword argument 'dtype'
+    TypeError: MultiIndex.__new__() got an unexpected keyword argument 'dtype'
 
-Inner aggregate steps succeed; the crash happens when the resulting
-Series is materialized via pybind back to a pandas object — something
-in the Series→pandas path is passing `dtype=` to a MultiIndex ctor
-that no longer accepts it under pandas 3.x.
+**Fix:** `MultiIndex.__topython__` now builds the index with
+`pd.MultiIndex.from_arrays(self._cols, names=self.names)`, the supported
+constructor for "list of arrays + names".
 
-**Reproducer:** `test/pandas/test_groupby_merge.py::test_groupby_series_nunique` (xfail).
-
-    df.groupby(["k"])["v"].nunique()    # aborts with the above
-
-**Fix sketch:** in the Series-from-groupby topython path, stop passing
-`dtype=` to `MultiIndex.__new__` (pandas 3.x removed that kwarg).
+**Regression test:** `test/pandas/test_groupby_merge.py::test_groupby_series_nunique`.
 
 ---
 
