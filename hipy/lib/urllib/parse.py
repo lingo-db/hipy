@@ -79,15 +79,15 @@ class ParseResult(_named_tuple, NetlocResultMixin):
 
 
 @hipy.classdef
-class SplitResult(_named_tuple):
+class SplitResult(_named_tuple, NetlocResultMixin):
     def __init__(self, elts, value=None):
-        super().__init__(elts, "ParseResult", ["scheme", "netloc", "path", "query", "fragment"], value=value)
+        super().__init__(elts, "SplitResult", ["scheme", "netloc", "path", "query", "fragment"], value=value)
         NetlocResultMixin.__init__(self)
 
     @staticmethod
     @hipy.raw
     def __create__(scheme, netloc, path, query, fragment, _context):
-        return _context.wrap(ParseResult([scheme, netloc, path, query, fragment]))
+        return _context.wrap(SplitResult([scheme, netloc, path, query, fragment]))
 
     @hipy.compiled_function
     def __topython__(self):

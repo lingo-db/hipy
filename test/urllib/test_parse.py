@@ -79,7 +79,6 @@ def fn_urlsplit_basic():
 import pytest
 
 
-@pytest.mark.xfail(reason="SplitResult.__create__ incorrectly returns ParseResult (with 6 field names) built from 5 elts — fragment access raises IndexError")
 def test_urlsplit_basic():
     check_prints(fn_urlsplit_basic, """
 http
