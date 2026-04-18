@@ -283,3 +283,55 @@ def test_date_through_variable():
 1""")
 
 
+@hipy.compiled_function
+def fn_date_topython():
+    # date.__topython__ reaches into datetime.date(year, month, day) — fallback path.
+    d = datetime.date(not_constant(2024), not_constant(5), not_constant(16))
+    p = hipy.intrinsics.to_python(d)
+    print(p)
+
+
+def test_date_topython():
+    check_prints(fn_date_topython, """
+2024-05-16
+""", fallback=True)
+
+
+@hipy.compiled_function
+def fn_timedelta_topython():
+    # timedelta.__topython__ via datetime.timedelta(days, seconds).
+    t = datetime.timedelta(not_constant(2), not_constant(30))
+    p = hipy.intrinsics.to_python(t)
+    print(p)
+
+
+def test_timedelta_topython():
+    check_prints(fn_timedelta_topython, """
+2 days, 0:00:30
+""", fallback=True)
+
+
+@hipy.compiled_function
+def fn_timedelta_neg_zero():
+    # __neg__ of zero timedelta still equals zero; bool() stays False.
+    z = datetime.timedelta(0)
+    n = -z
+    if n:
+        print("nonzero")
+    else:
+        print("zero")
+    # Subtract equal intervals → zero → bool False.
+    a = datetime.timedelta(5)
+    if (a - a):
+        print("nonzero")
+    else:
+        print("zero")
+
+
+def test_timedelta_neg_zero():
+    check_prints(fn_timedelta_neg_zero, """
+zero
+zero
+""")
+
+

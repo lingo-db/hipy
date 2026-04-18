@@ -220,3 +220,137 @@ def test_multiply():
 [1, 2, 3, 1, 2, 3, 1, 2, 3]
 [1, 2, 3, 1, 2, 3, 1, 2, 3]
 """)
+
+
+@hipy.compiled_function
+def fn_list_setitem():
+    # list.__setitem__ dispatches to list.set builtin.
+    l = not_constant([1, 2, 3])
+    l[0] = 42
+    l[2] = 99
+    print(l)
+
+
+def test_list_setitem():
+    check_prints(fn_list_setitem, """
+[42, 2, 99]
+""")
+
+
+@hipy.compiled_function
+def fn_list_slice():
+    # list.__getitem__ with slice uses range + list comprehension.
+    l = not_constant([10, 20, 30, 40, 50])
+    print(l[1:4])
+    print(l[:2])
+    print(l[3:])
+    print(l[::2])
+
+
+def test_list_slice():
+    check_prints(fn_list_slice, """
+[20, 30, 40]
+[10, 20]
+[40, 50]
+[10, 30, 50]
+""")
+
+
+@hipy.compiled_function
+def fn_list_contains():
+    # list.__contains__ iterates + compares.
+    l = not_constant([1, 2, 3])
+    print(2 in l)
+    print(5 in l)
+    print(1 not in l)
+
+
+def test_list_contains():
+    check_prints(fn_list_contains, """
+True
+False
+False
+""")
+
+
+@hipy.compiled_function
+def fn_list_index():
+    # list.index iterates with break and returns first match.
+    l = not_constant([10, 20, 30, 20])
+    print(l.index(20))
+    print(l.index(10))
+
+
+def test_list_index():
+    check_prints(fn_list_index, """
+1
+0
+""")
+
+
+@hipy.compiled_function
+def fn_list_sort():
+    # list.sort dispatches to list.sort builtin with a bound lambda compare_fn.
+    l = not_constant([3, 1, 2])
+    l.sort()
+    print(l)
+    l2 = not_constant([5, 2, 8, 1, 3])
+    l2.sort()
+    print(l2)
+
+
+def test_list_sort():
+    check_prints(fn_list_sort, """
+[1, 2, 3]
+[1, 2, 3, 5, 8]
+""")
+
+
+@hipy.compiled_function
+def fn_list_lt():
+    # list.__lt__ compares element-wise with short-circuiting.
+    a = not_constant([1, 2, 3])
+    b = not_constant([1, 2, 4])
+    print(a < b)
+    print(b < a)
+    c = not_constant([1, 2, 3])
+    print(a < c)
+
+
+def test_list_lt():
+    check_prints(fn_list_lt, """
+True
+False
+False
+""")
+
+
+@hipy.compiled_function
+def fn_list_add():
+    # list.__add__ concatenates two same-element-type lists.
+    a = not_constant([1, 2])
+    b = not_constant([3, 4, 5])
+    print(a + b)
+
+
+def test_list_add():
+    check_prints(fn_list_add, """
+[1, 2, 3, 4, 5]
+""")
+
+
+@hipy.compiled_function
+def fn_list_topython_roundtrip():
+    # list.__topython__ -> python list; isa check preserved.
+    l = not_constant([1, 2, 3])
+    p = intrinsics.to_python(l)
+    print(p)
+    if intrinsics.isa(p, object):
+        print("is pyobj")
+
+
+def test_list_topython_roundtrip():
+    check_prints(fn_list_topython_roundtrip, """
+[1, 2, 3]
+is pyobj
+""")

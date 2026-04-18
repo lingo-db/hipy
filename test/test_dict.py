@@ -78,3 +78,102 @@ def test_dict_concrete_non_const():
 True
 1
 False""")
+
+
+@hipy.compiled_function
+def fn_dict_contains():
+    # dict.__contains__ → dict.contains builtin.
+    d = not_constant({"a": 1, "b": 2})
+    print("a" in d)
+    print("c" in d)
+    print("b" not in d)
+
+
+def test_dict_contains():
+    check_prints(fn_dict_contains, """
+True
+False
+False
+""")
+
+
+@hipy.compiled_function
+def fn_dict_len():
+    # dict.__len__ → dict.length builtin.
+    d = not_constant({"a": 1, "b": 2, "c": 3})
+    print(len(d))
+
+
+def test_dict_len():
+    check_prints(fn_dict_len, """
+3
+""")
+
+
+@hipy.compiled_function
+def fn_dict_get():
+    # dict.get exercises `key in self` + default-fallback path distinct from setdefault.
+    d = not_constant({"a": 1, "b": 2})
+    print(d.get("a", 99))
+    print(d.get("x", 99))
+    # After get with missing key, the dict should not be mutated.
+    print("x" in d)
+
+
+def test_dict_get():
+    check_prints(fn_dict_get, """
+1
+99
+False
+""")
+
+
+@hipy.compiled_function
+def fn_dict_iter():
+    # Iterating a dict yields keys (via dict.iter_keys builtin).
+    d = not_constant({"a": 1, "b": 2, "c": 3})
+    total = 0
+    for k in d:
+        total += d[k]
+    print(total)
+
+
+def test_dict_iter():
+    check_prints(fn_dict_iter, """
+6
+""")
+
+
+@hipy.compiled_function
+def fn_dict_items():
+    # dict.items() returns a _items view iterable yielding tuples.
+    d = not_constant({"a": 1, "b": 2})
+    total = 0
+    for k, v in d.items():
+        total += v
+    print(total)
+
+
+def test_dict_items():
+    check_prints(fn_dict_items, """
+3
+""")
+
+
+@hipy.compiled_function
+def fn_dict_topython_roundtrip():
+    # dict.__topython__ iterates + builds python dict via python.create_dict.
+    # Iteration order of HiPy dict is unspecified (does not preserve insertion
+    # order), so probe by key membership rather than printing the whole dict.
+    d = not_constant({"a": 1, "b": 2})
+    p = intrinsics.to_python(d)
+    if intrinsics.isa(p, object):
+        print("is pyobj")
+    print(p["a"], p["b"])
+
+
+def test_dict_topython_roundtrip():
+    check_prints(fn_dict_topython_roundtrip, """
+is pyobj
+1 2
+""", fallback=True)

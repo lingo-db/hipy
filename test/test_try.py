@@ -97,3 +97,56 @@ def test_try_assign():
     check_prints(fn_try_assign, """0
 42
 """)
+
+
+@hipy.compiled_function
+def fn_try_abstract_int():
+    # int(<abstract str>) can raise at runtime → except catches it.
+    s = not_constant("abc")
+    try:
+        v = int(s)
+    except:
+        v = -1
+    print(v)
+    s2 = not_constant("100")
+    try:
+        v2 = int(s2)
+    except:
+        v2 = -1
+    print(v2)
+
+
+def test_try_abstract_int():
+    check_prints(fn_try_abstract_int, """
+-1
+100
+""")
+
+
+@hipy.compiled_function
+def fn_try_nested():
+    # Nested try — inner catches, outer untriggered.
+    try:
+        try:
+            v = int(not_constant("bad"))
+        except:
+            v = 1
+        print(v)
+    except:
+        print("outer")
+
+    # Nested try — inner except re-raises by calling a raising function, outer catches.
+    try:
+        try:
+            v = int(not_constant("bad"))
+        except:
+            v = int(not_constant("also-bad"))
+    except:
+        print("outer")
+
+
+def test_try_nested():
+    check_prints(fn_try_nested, """
+1
+outer
+""")

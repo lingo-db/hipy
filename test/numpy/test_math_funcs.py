@@ -19,3 +19,37 @@ def test_sin():
 0.909297
 [0.84147098 0.84147098 0.84147098]
 """)
+
+
+@hipy.compiled_function
+def fn_cos_sqrt_exp_log():
+    # Cover the cos/sqrt/exp/log scalar-&-array overloads (all via _float_function).
+    print(np.cos(0.0))
+    print(np.sqrt(4.0))
+    print(np.log(1.0))
+    print(np.exp(0.0))
+    print(np.sqrt(np.ones(3) * 9.0))
+
+
+def test_cos_sqrt_exp_log():
+    check_prints(fn_cos_sqrt_exp_log, """
+1.0
+2.0
+0.0
+1.0
+[3. 3. 3.]
+""")
+
+
+@hipy.compiled_function
+def fn_arcsin():
+    # np.arcsin — the arcsin branch of _float_function. Float→str uses 6-digit precision.
+    print(np.arcsin(0.0))
+    print(np.arcsin(1.0))
+
+
+def test_arcsin():
+    check_prints(fn_arcsin, """
+0.0
+1.570796
+""")

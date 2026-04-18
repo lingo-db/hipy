@@ -98,3 +98,55 @@ def test_len():
     check_prints(fn_len, """
 3
 """)
+
+
+@hipy.compiled_function
+def fn_tuple_lt():
+    # tuple.__lt__ recursively elementwise-compares via _elementwise_comparison.
+    a = not_constant((1, 2, 3))
+    b = not_constant((1, 2, 4))
+    print(a < b)
+    print(b < a)
+    c = not_constant((1, 2, 3))
+    print(a < c)
+
+
+def test_tuple_lt():
+    check_prints(fn_tuple_lt, """
+True
+False
+False
+""")
+
+
+@hipy.compiled_function
+def fn_tuple_repr_singleton():
+    # __hipy__repr__ adds trailing comma for singletons.
+    print((42,))
+    print(("x",))
+
+
+def test_tuple_repr_singleton():
+    check_prints(fn_tuple_repr_singleton, """
+(42,)
+('x',)
+""")
+
+
+@hipy.compiled_function
+def fn_tuple_mixed_types():
+    # A tuple with heterogeneous element types exercises the TupleType class.
+    t = not_constant((1, "hello", 3.14))
+    print(t)
+    print(t[0])
+    print(t[1])
+    print(t[2])
+
+
+def test_tuple_mixed_types():
+    check_prints(fn_tuple_mixed_types, """
+(1, 'hello', 3.14)
+1
+hello
+3.14
+""")

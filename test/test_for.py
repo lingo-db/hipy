@@ -58,3 +58,51 @@ def test_for_break():
 2
 3
 4""")
+
+
+@hipy.compiled_function
+def fn_for_nested():
+    # Nested abstract for loops — sum of i*j for i,j in [0..3)x[0..3).
+    total = 0
+    for i in range(not_constant(3)):
+        for j in range(not_constant(3)):
+            total += i * j
+    print(total)
+
+
+def test_for_nested():
+    check_prints(fn_for_nested, """
+9
+""")
+
+
+@hipy.compiled_function
+def fn_for_string():
+    # Iterating a string yields single-char strings (via str._iterator).
+    total = 0
+    for c in not_constant("abc"):
+        total += ord(c)
+    print(total)
+
+
+def test_for_string():
+    check_prints(fn_for_string, """
+294
+""")
+
+
+@hipy.compiled_function
+def fn_for_enumerate_break():
+    # enumerate + break exits both index and value iteration.
+    idx = -1
+    for i, v in enumerate(not_constant([10, 20, 30, 40])):
+        idx = i
+        if v == 30:
+            break
+    print(idx)
+
+
+def test_for_enumerate_break():
+    check_prints(fn_for_enumerate_break, """
+2
+""")

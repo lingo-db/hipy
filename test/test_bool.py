@@ -69,3 +69,61 @@ def test_bool_conversions():
 False
 True
 """)
+
+
+@hipy.compiled_function
+def fn_bool_int_cast():
+    # bool.__int__ is defined but not previously exercised: verify 1/0 come out.
+    print(int(not_constant(True)))
+    print(int(not_constant(False)))
+    # Arithmetic with an int should also succeed via the bool -> int coercion.
+    print(not_constant(True) + 1)
+    print(not_constant(False) + 1)
+
+
+def test_bool_int_cast():
+    check_prints(fn_bool_int_cast, """
+1
+0
+2
+1
+""")
+
+
+@hipy.compiled_function
+def fn_bool_truthiness_values():
+    # bool(...) over various runtime values exercises __bool__ on each type.
+    print(bool(not_constant(0)))
+    print(bool(not_constant(5)))
+    print(bool(not_constant(0.0)))
+    print(bool(not_constant(1.5)))
+    print(bool(not_constant("")))
+    print(bool(not_constant("a")))
+
+
+def test_bool_truthiness_values():
+    check_prints(fn_bool_truthiness_values, """
+False
+True
+False
+True
+False
+True
+""", fallback=True)
+
+
+@hipy.compiled_function
+def fn_bool_topython_roundtrip():
+    # Round-trip a runtime bool through pyobj and back via the fallback path.
+    t = not_constant(True)
+    p = intrinsics.to_python(t)
+    print(p)
+    if intrinsics.isa(p, object):
+        print("is pyobj")
+
+
+def test_bool_topython_roundtrip():
+    check_prints(fn_bool_topython_roundtrip, """
+True
+is pyobj
+""")

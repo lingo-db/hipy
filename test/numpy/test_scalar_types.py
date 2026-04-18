@@ -43,3 +43,82 @@ def test_cast_to_python():
 42
 42.0
 """)
+
+
+@hipy.compiled_function
+def fn_int64_compare():
+    # np.int64 comparison routes through _cmp_op (scalar.int.compare.*).
+    a = np.int64(not_constant(5))
+    b = np.int64(not_constant(3))
+    print(a == a)
+    print(a != b)
+    print(a < b)
+    print(a > b)
+    print(a <= a)
+    print(a >= b)
+
+
+def test_int64_compare():
+    check_prints(fn_int64_compare, """
+True
+True
+False
+True
+True
+True
+""")
+
+
+@hipy.compiled_function
+def fn_int64_arith():
+    # np.int64 +/-/* exercised via _int_op (scalar.int.*).
+    a = np.int64(not_constant(10))
+    b = np.int64(not_constant(3))
+    print(a + b)
+    print(a - b)
+    print(a * b)
+    print(a % b)
+
+
+def test_int64_arith():
+    check_prints(fn_int64_arith, """
+13
+7
+30
+1
+""")
+
+
+@hipy.compiled_function
+def fn_float64_arith():
+    # np.float64 +/-/*/pow via _float_op (scalar.float.*).
+    a = np.float64(not_constant(2.0))
+    b = np.float64(not_constant(3.0))
+    print(a + b)
+    print(a - b)
+    print(a * b)
+    print(a ** b)
+
+
+def test_float64_arith():
+    check_prints(fn_float64_arith, """
+5.0
+-1.0
+6.0
+8.0
+""")
+
+
+@hipy.compiled_function
+def fn_float64_round():
+    # np.float64.__round__ returns a scalar via scalar.float.round.
+    x = np.float64(not_constant(3.14159))
+    print(round(x))
+    print(round(x, 2))
+
+
+def test_float64_round():
+    check_prints(fn_float64_round, """
+3
+3.14
+""")

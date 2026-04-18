@@ -23,3 +23,57 @@ def test_for_tuple_target():
 8
 9
 10""")
+
+
+@hipy.compiled_function
+def fn_while_break():
+    # while with break exits early — abstract condition forces runtime loop.
+    x = not_constant(0)
+    while x < 100:
+        if x == 5:
+            break
+        x += 1
+    print(x)
+
+
+@pytest.mark.xfail(reason="BUG: abstract while-loop with break does not terminate (compiles, runs forever)", run=False, strict=True)
+def test_while_break():
+    check_prints(fn_while_break, """
+5
+""")
+
+
+@hipy.compiled_function
+def fn_while_continue():
+    # while with continue skips the printed counter increment; abstract bound.
+    x = not_constant(0)
+    printed = 0
+    while x < 6:
+        x += 1
+        if x % 2 == 0:
+            continue
+        printed += 1
+    print(printed)
+
+
+@pytest.mark.xfail(reason="BUG: abstract while-loop with continue does not terminate", run=False, strict=True)
+def test_while_continue():
+    check_prints(fn_while_continue, """
+3
+""")
+
+
+@hipy.compiled_function
+def fn_while_abstract_cond():
+    # Condition references a runtime-abstract value — forces abstract loop.
+    n = not_constant(4)
+    x = 0
+    while x < n:
+        x += 1
+    print(x)
+
+
+def test_while_abstract_cond():
+    check_prints(fn_while_abstract_cond, """
+4
+""")
