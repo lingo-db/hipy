@@ -1242,14 +1242,3 @@ def run(fn_name, module: ir.Module, release=False):
     return write_compile_run_cpp(def_str, release=release)
 
 
-def run_udf_scan(fn_name, module: ir.Module,columns: Dict[str, Any],data_file, release=True):
-    res_type=module.func(fn_name).res_type
-
-    params = CPPBackend(fn_name, module, release).run()
-    params["arrow_enabled"]="1"
-    params["py_enabled"]="1"
-    params["numpy_enabled"]="1"
-    params["column_accessors"]= "\n".join([f"auto col_{col} = {get_column_accessor(columns[col])}(batch->column({i}));" for i,col in enumerate(columns)])
-    params["column_vals"]= ",".join([f"col_{col}.access(i)" for col in columns])
-    def_str = env.get_template('udf_eval.cpp').render(**params,data_file=data_file,res_builder_type=get_column_builder(res_type))
-    return write_compile_run_cpp(def_str, release=release)

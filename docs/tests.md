@@ -197,10 +197,9 @@ backend.
 
 ## 7. Gotchas
 
-- **`check_prints` is the only production-grade runner.** The
-  `run_interpreter` path in `hipy/binding.py` is deprecated and uses an
-  external DBPy-IR interpreter binary that no longer ships with the
-  repo. Don't cargo-cult that path into new tests.
+- **`check_prints` is the only production-grade runner.** It lives in
+  `hipy/interpreter.py` and drives the C++ backend. Don't invent
+  alternative runners for new tests.
 - **Every shim test must import its shim module** before compiling, or
   the generator silently uses the real library and tests accidentally
   pass via CPython fallback. If a test starts failing after "refactoring"

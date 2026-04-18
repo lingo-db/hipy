@@ -129,22 +129,11 @@ wrapping a `closure_record`:
 the try-and-except bodies. For `_if`/`_while`/`_for` the rewriter passes
 inputs explicitly as arguments, so no closure record is built there.
 
-## 5. `hipy/binding.py` — deprecated/alternative interpreter launcher
+## 5. `hipy/interpreter.py` — test runner
 
-Contains `run_interpreter(function_name, module)`:
-- Serializes the IR to JSON (`program.dbpyir.json`).
-- Execs an external binary at `../../interpreter/cmake-build-debug/interpreter`
-  (overridable via `$DBPYIR_INTERPRETER`) with that JSON.
-- Returns `(stdout, stderr, returncode)`.
-
-This was the original standalone interpreter before the C++ back-end took
-over. In practice production paths use `hipy/cppbackend/` instead. Keep in
-mind if you see references to "DBPy IR" in old commits — it's this.
-
-Also contains `show(result)` for printing the above, and `check_prints(fn,
-expected_str, fallback=False, debug=None)` — used by tests to compile `fn`
-through the C++ backend, run it, and assert stdout == `expected_str`. The
-`HIPY_DEBUG` env var toggles debug.
+Contains `check_prints(fn, expected_str, fallback=False, debug=None)` —
+used by tests to compile `fn` through the C++ backend, run it, and assert
+stdout == `expected_str`. The `HIPY_DEBUG` env var toggles debug.
 
 ## 6. `hipy/interpreter.py` — in-process fallback
 
