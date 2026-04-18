@@ -1,0 +1,68 @@
+# Bugs discovered while adding coverage tests
+
+Tests that exposed these bugs are marked with `@pytest.mark.xfail` or
+commented out so they don't block CI, but the inputs stay in the repo
+as reproducers.
+
+---
+
+## 1. `str.format()` with empty spec `"{}"` produces the empty string
+
+**Location:** `hipy/lib/builtins.py:1017-1027` — `_const_str.translate_python_spec_to_cpp`.
+
+When the Python spec is empty (i.e. `"{}"`), the translator returns
+`""` and emits `std::vformat("", ...)`, which produces the empty
+string. It should return `"{}"` so the default formatter for the
+argument is invoked.
+
+**Reproducer:** `test/test_string_format.py::test_format_basic` (xfail).
+
+    "{}".format(42)           # expected: "42",  actual: ""
+    "a={} b={}".format(1, 2)  # expected: "a=1 b=2", actual: "a= b="
+
+**Fix sketch:** in `translate_python_spec_to_cpp`, return `"{}"` for
+empty input rather than `""`.
+
+---
+
+## 2. `str.__mod__` does not unpack a tuple RHS
+
+**Location:** `hipy/lib/builtins.py:1382-1390` — `_const_str.__mod__`.
+
+`"%d %d" % (1, 2)` passes the tuple `(1, 2)` as the single positional
+`__mod__` arg. `__mod__(self, *args)` receives `args = ((1, 2),)`
+and indexes `args[1]`, raising `IndexError`.
+
+Python's real `%` unpacks a tuple RHS automatically; HiPy's
+implementation does not.
+
+**Reproducer:** `test/test_string_format.py::test_percent_escape_and_multiple` (xfail).
+
+    "100%% of %d is %d" % (50, 50)   # IndexError: tuple index out of range
+
+**Fix sketch:** in `__mod__`, detect a tuple RHS (single arg that is a
+tuple) and treat it as positional args.
+
+---
+
+## 3. `df.groupby(by)[col].nunique()` trips `MultiIndex.__new__() got an unexpected keyword argument 'dtype'`
+
+**Location:** `hipy/lib/pandas/__init__.py` — `DataFrameGroupBySeriesGroupBy.nunique`
+(around line 301) combined with the eventual `__topython__` /
+`print` conversion path. The standalone binary aborts with:
+
+    terminate called after throwing an instance of 'pybind11::error_already_set'
+      what():  TypeError: MultiIndex.__new__() got an unexpected keyword argument 'dtype'
+
+Inner aggregate steps succeed; the crash happens when the resulting
+Series is materialized via pybind back to a pandas object — something
+in the Series→pandas path is passing `dtype=` to a MultiIndex ctor
+that no longer accepts it under pandas 3.x.
+
+**Reproducer:** `test/pandas/test_groupby_merge.py::test_groupby_series_nunique` (xfail).
+
+    df.groupby(["k"])["v"].nunique()    # aborts with the above
+
+**Fix sketch:** in the Series-from-groupby topython path, stop passing
+`dtype=` to `MultiIndex.__new__` (pandas 3.x removed that kwarg).
+

@@ -108,3 +108,16 @@ def test_isnan_float():
 False
 False
 """)
+
+
+@hipy.compiled_function
+def fn_isnan_array():
+    # np.isnan on an ndarray uses the _array_apply_scalar branch.
+    a = np.ones(3)
+    print(np.isnan(a))
+
+
+def test_isnan_array():
+    check_prints(fn_isnan_array, """
+[False False False]
+""")
