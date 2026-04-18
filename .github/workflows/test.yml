@@ -22,7 +22,7 @@ jobs:
           python3 -m venv ${{ github.workspace }}/venv
           echo "${{ github.workspace }}/venv/bin" >> $GITHUB_PATH
           source ${{ github.workspace }}/venv/bin/activate
-          pip install pytest numpy pandas pyarrow networkx scipy pybind11 jinja2 scikit-learn
+          pip install pytest pytest-cov numpy pandas pyarrow networkx scipy pybind11 jinja2 scikit-learn
           python -c "import pyarrow; pyarrow.create_library_symlinks()"
 
       - name: Build C++ backend
@@ -42,4 +42,11 @@ jobs:
           export HIPY_STANDALONE_BUILD=/generator
           source ${{ github.workspace }}/venv/bin/activate
           export PYTHONPATH=".:$PYTHONPATH"
-          pytest test
+          pytest test --cov=hipy --cov-report=xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
