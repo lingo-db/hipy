@@ -82,7 +82,6 @@ def fn_ceil():
     print(math.ceil(not_constant(-0.1)))
 
 
-@pytest.mark.xfail(reason="scalar.float.ceil not implemented in C++ backend")
 def test_ceil():
     check_prints(fn_ceil, """
 2
