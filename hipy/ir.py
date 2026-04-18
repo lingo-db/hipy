@@ -7,11 +7,6 @@ class VoidType:
     def __str__(self):
         return 'void'
 
-    def serialize(self):
-        return {"kind": "type",
-                "name": "void"
-                }
-
     def mangle(self):
         return "void"
 
@@ -22,15 +17,9 @@ class VoidType:
         return self.mangle() == other.mangle()
 
 
-
 class PyObjType:
     def __str__(self):
         return 'py_object'
-
-    def serialize(self):
-        return {"kind": "type",
-                "name": "py_object"
-                }
 
     def mangle(self):
         return "pyobj"
@@ -48,11 +37,6 @@ class PyObjType:
 class BoolType:
     def __str__(self):
         return 'bool'
-
-    def serialize(self):
-        return {"kind": "type",
-                "name": "bool"
-                }
 
     def mangle(self):
         return "bool"
@@ -74,12 +58,6 @@ class IntegerType:
     def __str__(self):
         return f'i{self.width}'
 
-    def serialize(self):
-        return {"kind": "type",
-                "name": "int",
-                "width": self.width
-                }
-
     def mangle(self):
         return str(self)
 
@@ -100,12 +78,6 @@ class FloatType:
     def __str__(self):
         return f'f{self.width}'
 
-    def serialize(self):
-        return {"kind": "type",
-                "name": "float",
-                "width": self.width
-                }
-
     def mangle(self):
         return str(self)
 
@@ -123,11 +95,6 @@ class StringType:
     def __str__(self):
         return 'str'
 
-    def serialize(self):
-        return {"kind": "type",
-                "name": "string"
-                }
-
     def mangle(self):
         return str(self)
 
@@ -144,11 +111,6 @@ class StringType:
 class IntType:
     def __str__(self):
         return 'int'
-
-    def serialize(self):
-        return {"kind": "type",
-                "name": "pyint"
-                }
 
     def mangle(self):
         return str(self)
@@ -170,13 +132,6 @@ class DictType:
 
     def __str__(self):
         return f"dict[{self.key_type},{self.val_type}]"
-
-    def serialize(self):
-        return {"kind": "type",
-                "name": "dict",
-                "key_type": self.key_type.serialize(),
-                "val_type": self.val_type.serialize(),
-                }
 
     def mangle(self):
         return f"dict_{self.key_type.mangle()}_{self.val_type.mangle()}"
@@ -202,12 +157,6 @@ class RecordType:
     def mangle(self):
         return f"record_{"_".join([f"{m}_{t.mangle()}" for m, t in self.members])}"
 
-    def serialize(self):
-        return {"kind": "type",
-                "name": "record",
-                "members": {m: t.serialize() for m, t in self.members}
-                }
-
     def get_generic(self):
         return RecordType([])
 
@@ -232,12 +181,6 @@ class ArrayType:
     def __str__(self):
         return f'array[{self.shape_str() if self.shape is not None else ""}x{self.element_type}]'
 
-    def serialize(self):
-        return {"kind": "type",
-                "name": "array",
-                "element_type": self.element_type.serialize(),
-                }
-
 
 class ColumnType:
     def __init__(self, element_type):
@@ -258,12 +201,6 @@ class ColumnType:
     def get_generic(self):
         return ColumnType(None)
 
-    def serialize(self):
-        return {"kind": "type",
-                "name": "column",
-                "element_type": self.element_type.serialize(),
-                }
-
 
 class ListType:
     def __init__(self, element_type):
@@ -283,12 +220,6 @@ class ListType:
 
     def get_generic(self):
         return ListType(None)
-
-    def serialize(self):
-        return {"kind": "type",
-                "name": "list",
-                "element_type": self.element_type.serialize(),
-                }
 
 
 class TableType:
@@ -316,20 +247,10 @@ class TableType:
     def __eq__(self, other):
         return self.mangle() == other.mangle()
 
-    def serialize(self):
-        return {"kind": "type",
-                "name": "table",
-                "members": {m: t.serialize() for m, t in self.members}
-                }
 
 class DateType:
     def __str__(self):
         return 'date'
-
-    def serialize(self):
-        return {"kind": "type",
-                "name": "date"
-                }
 
     def mangle(self):
         return "date"
@@ -346,11 +267,6 @@ class DateType:
 class IntervalType:
     def __str__(self):
         return 'interval'
-
-    def serialize(self):
-        return {"kind": "type",
-                "name": "interval"
-                }
 
     def mangle(self):
         return "interval"
@@ -370,11 +286,6 @@ class NullableType:
 
     def __str__(self):
         return 'nullable[' + str(self.type) + ']'
-    def serialize(self):
-        return {"kind": "type",
-                "name": "nullable",
-                "type": self.type.serialize()
-                }
     def mangle(self):
         return f"nullable_{self.type.mangle()}"
     def __hash__(self):
@@ -414,13 +325,6 @@ class SSAValue:
     def __str__(self):
         return f'val_{self.id} : {self.type}'
 
-    def serialize(self):
-        return {
-            "kind": "value",
-            "id": self.id,
-            "type": self.type.serialize()
-        }
-
     def __eq__(self, other):
         return self.id == other.id
 
@@ -429,7 +333,6 @@ class SSAValue:
 
     def __lt__(self, other):
         return self.id < other.id
-
 
 block_ctr = 0
 
@@ -447,9 +350,6 @@ class Block:
         for op in self.ops:
             lines.extend(str(op).split("\n"))
         return f'{indent}{f"\n{indent}".join(lines)}'
-
-    def serialize(self):
-        return list(map(lambda op: op.serialize(), self.ops))
 
 
 class Module:
@@ -477,14 +377,6 @@ class Module:
 {self.block}
 }}"""
 
-    def serialize(self):
-        return {
-            "kind": "module",
-            "imports": self.imports,
-            "py_functions": self.py_functions,
-            "functions": self.block.serialize()
-        }
-
     def merge(self, other: 'Module'):
         self.block.ops.extend(other.block.ops)
         self.imports.update(other.imports)
@@ -505,15 +397,6 @@ class Function:
 {self.body}
 }}"""
 
-    def serialize(self):
-        return {
-            "kind": "function",
-            "name": self.name,
-            "args": list(map(lambda arg: arg.serialize(), self.args)),
-            "res_type": self.res_type.serialize(),
-            "body": self.body.serialize()
-        }
-
 
 class FunctionRefType:
     def __init__(self, function: Function, closure_type):
@@ -524,18 +407,10 @@ class FunctionRefType:
     def __str__(self):
         return f'function_ref({",".join(map(lambda t: str(t), self.arg_types))})->{self.res_type}'
 
-    def serialize(self):
-        return {"kind": "type",
-                "name": "function_ref",
-                "res_type": self.res_type.serialize()
-                }
-
     def mangle(self):
         return str(self).replace("(", "_").replace(")", "_").replace("->", "_")
 
-
 lambdas = 0
-
 
 
 class Operation(abc.ABC):
@@ -588,14 +463,6 @@ class CallBuiltin(Operation):
     def __str__(self):
         return f'{self.result} = builtin {"[noeffect]" if not self.side_effects else ""} {self.name}({", ".join(map(lambda x: str(x), self.args))}) {self.attributes if self.attributes is not None else ""}'
 
-    def serialize(self):
-        return {
-            "kind": "CallBuiltin",
-            "name": self.name,
-            "args": list(map(lambda arg: arg.serialize(), self.args)),
-            "result": self.result.serialize()
-        }
-
     def get_used_values(self):
         return self.args
 
@@ -625,17 +492,6 @@ class FunctionRef(Operation):
 
     def __str__(self):
         return f'{self.result} = function_ref {self.name}' + (f'[{self.closure}]' if self.closure is not None else '')
-
-    def serialize(self):
-        d = {
-            "kind": "FunctionRef",
-            "name": self.name,
-            "result": self.result.serialize(),
-
-        }
-        if self.closure is not None:
-            d["closure"] = self.closure.serialize()
-        return d
 
     def get_used_values(self):
         return [self.closure] if self.closure is not None else []
@@ -668,13 +524,6 @@ class MakeRecord(Operation):
     def __str__(self):
         return f'{self.result} = make_record {", ".join(map(lambda i: f"{i[0]}={str(i[1])}", self.values.items()))}'
 
-    def serialize(self):
-        return {
-            "kind": "MakeRecord",
-            "values": {k: v.serialize() for k, v in self.values.items()},
-            "result": self.result.serialize()
-        }
-
     def get_used_values(self):
         return [v for _, v in self.values.items()]
 
@@ -705,14 +554,6 @@ class RecordGet(Operation):
     def __str__(self):
         return f'{self.result} = record_get {self.record}[{self.member}]'
 
-    def serialize(self):
-        return {
-            "kind": "RecordGet",
-            "record": self.record.serialize(),
-            "member": self.member,
-            "result": self.result.serialize()
-        }
-
     def get_used_values(self):
         return [self.record]
 
@@ -741,13 +582,6 @@ class PyImport(Operation):
     def __str__(self):
         return f'{self.result} = py_import {self.name}'
 
-    def serialize(self):
-        return {
-            "kind": "PyImport",
-            "name": self.name,
-            "result": self.result.serialize()
-        }
-
     def get_used_values(self):
         return []
 
@@ -766,7 +600,6 @@ class PyImport(Operation):
         return cloned
 
 
-
 class PythonCall(Operation):
     def __init__(self, block: Block, callable: SSAValue, args: List[SSAValue], kw_args: List[Tuple[str, SSAValue]]):
         block.ops.append(self)
@@ -777,15 +610,6 @@ class PythonCall(Operation):
 
     def __str__(self):
         return f'{self.result} = py_call ({self.callable})({", ".join(map(lambda x: str(x), self.args)) + "," if len(self.args) > 0 else ""}{",".join(map(lambda x: f"{x[0]}={x[1]}", self.kw_args))})'
-
-    def serialize(self):
-        return {
-            "kind": "PyCall2",
-            "callable": self.callable.serialize(),
-            "args": list(map(lambda arg: arg.serialize(), self.args)),
-            "kw_args": [{"name": k, "value": v.serialize()} for k, v in self.kw_args],
-            "result": self.result.serialize()
-        }
 
     def get_used_values(self):
         return [self.callable]+self.args + [v for _, v in self.kw_args]
@@ -819,14 +643,6 @@ class PyGetAttr(Operation):
     def __str__(self):
         return f'{self.result} = py_get_attr ({self.on}).{self.name}'
 
-    def serialize(self):
-        return {
-            "kind": "PyGetAttr",
-            "name": self.name,
-            "on": self.on.serialize(),
-            "result": self.result.serialize()
-        }
-
     def get_used_values(self):
         return [self.on]
 
@@ -856,15 +672,6 @@ class PySetAttr(Operation):
 
     def __str__(self):
         return f'{self.result} = py_set_attr ({self.on}).{self.name} = {self.value}'
-
-    def serialize(self):
-        return {
-            "kind": "PySetAttr",
-            "name": self.name,
-            "on": self.on.serialize(),
-            "value": self.value.serialize(),
-            "result": self.result.serialize()
-        }
 
     def get_used_values(self):
         return [self.on, self.value]
@@ -898,14 +705,6 @@ class Call(Operation):
     def __str__(self):
         return f'{self.result} = call {self.name}({", ".join(map(lambda x: str(x), self.args))})'
 
-    def serialize(self):
-        return {
-            "kind": "Call",
-            "name": self.name,
-            "args": list(map(lambda arg: arg.serialize(), self.args)),
-            "result": self.result.serialize()
-        }
-
     def get_used_values(self):
         return self.args
 
@@ -933,14 +732,6 @@ class CallIndirect(Operation):
 
     def __str__(self):
         return f'{self.result} = call {self.fnref}({", ".join(map(lambda x: str(x), self.args))})'
-
-    def serialize(self):
-        return {
-            "kind": "Call",
-            "fnref": self.fnref,
-            "args": list(map(lambda arg: arg.serialize(), self.args)),
-            "result": self.result.serialize()
-        }
 
     def get_used_values(self):
         return self.args+[self.fnref]
@@ -970,13 +761,6 @@ class Constant(Operation):
     def __str__(self):
         return f'{self.result} =  const {repr(self.v)}'
 
-    def serialize(self):
-        return {
-            "kind": "Constant",
-            "value": self.v,
-            "result": self.result.serialize()
-        }
-
     def get_used_values(self):
         return []
 
@@ -1002,12 +786,6 @@ class Undef(Operation):
 
     def __str__(self):
         return f'{self.result} =  undef'
-
-    def serialize(self):
-        return {
-            "kind": "Undef",
-            "result": self.result.serialize()
-        }
 
     def get_used_values(self):
         return []
@@ -1035,12 +813,6 @@ class Free:
 
     def __str__(self):
         return f'{self.result} =  free {self.v}'
-
-    def serialize(self):
-        return {
-            "kind": "NoOp",
-            "result": self.result.serialize()
-        }
 
     def get_used_values(self):
         return [self.v]
@@ -1071,12 +843,6 @@ class Return(Operation):
     def __str__(self):
         return f'return {",".join(map(lambda v: str(v), self.values))}'
 
-    def serialize(self):
-        return {
-            "kind": "Return",
-            "values": list(map(lambda arg: arg.serialize(), self.values)),
-        }
-
     def get_used_values(self):
         return self.values
 
@@ -1099,12 +865,6 @@ class Yield(Operation):
 
     def __str__(self):
         return f'yield {",".join(map(lambda v: str(v), self.values))}'
-
-    def serialize(self):
-        return {
-            "kind": "Yield",
-            "values": list(map(lambda arg: arg.serialize(), self.values)),
-        }
 
     def get_used_values(self):
         return self.values
@@ -1141,15 +901,6 @@ class IfElse(Operation):
 }} else {{
 {self.elseBody}
 }}"""
-
-    def serialize(self):
-        return {
-            "kind": "IfElse",
-            "cond": self.cond.serialize(),
-            "results": list(map(lambda arg: arg.serialize(), self.results)),
-            "ifBody": self.ifBody.serialize(),
-            "elseBody": self.elseBody.serialize(),
-        }
 
     def get_used_values(self):
         return [self.cond] + flatten([op.get_used_values() for op in self.ifBody.ops]) + flatten(

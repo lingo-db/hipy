@@ -8,9 +8,8 @@ back-end (C++, MLIR stub). It deliberately stays small and high-level — rich
 enough to express tables, arrays, columns as first-class types, but simple
 enough to lower to plain C++ or MLIR dialects.
 
-The whole module is plain Python data classes plus a `serialize()` method on
-every node that emits a JSON-friendly dict (used e.g. by `hipy/binding.py` to
-talk to the standalone interpreter binary).
+The whole module is plain Python data classes consumed directly by the
+C++ backend — there is no serialization layer.
 
 ## 1. Type system
 
@@ -18,7 +17,6 @@ The paper's Table "Types" (§4) is realized as a set of small Python classes.
 Every type class has:
 
 - `__str__` — pretty printer
-- `serialize()` — JSON form (`{"kind":"type","name":…, …}`)
 - `mangle()` — stable string used in symbol/name mangling and dict keys
 - `__eq__` / `__hash__` by mangled name
 - most also have `get_generic()` — drops parameters so the same family hashes
@@ -30,7 +28,7 @@ Every type class has:
 | `PyObjType` (`ir.pyobj`) | CPython-owned ref-counted object | anchor for fallback |
 | `BoolType` (`ir.bool`) | Python `bool` | |
 | `IntegerType(width)` / `ir.i8, i16, i32, i64` | fixed-width integer | typed for back-ends |
-| `IntType()` (`ir.int`) | Python arbitrary-width `int` | `serialize.name == "pyint"` |
+| `IntType()` (`ir.int`) | Python arbitrary-width `int` | |
 | `FloatType(width)` / `ir.f32, f64` | `float` | |
 | `StringType` (`ir.string`) | `str` / `bytes` unified | |
 | `RecordType([(name,type), …])` | records / named tuples / closures | has `member_type(col)` |
@@ -76,7 +74,6 @@ Every operation derives from `Operation` and implements:
 - `replace_uses(old, new)` — cheap SSA rewriter support
 - `get_nested_blocks()` — non-empty only for structured control flow
 - `clone(block, mapping)` — deep-clone into a new block, remapping SSA values
-- `serialize()` — JSON form for external consumers
 
 Helper utilities: `replace_usage_in_list`, `replace_usage_in_dict_values`, `flatten`.
 
@@ -143,23 +140,7 @@ These are the anchors for HiPy's fine-grained fallback. All of them return
 When the C++ back-end emits a binary, it wires these through the embedded
 CPython via pybind11 (see `cppbackend/builtin.h` and `hipy/binding.py`).
 
-## 4. Serialization
-
-Every node has a `serialize()` method that produces a JSON-friendly dict. The
-module-level `serialize()` yields:
-
-```
-{"kind":"module",
- "imports":{…},
- "py_functions":{name: python_source, …},
- "functions":[{"kind":"function", …}, …]}
-```
-
-`hipy/binding.py` uses this to hand a compiled IR off to an external
-interpreter. The standalone C++ path emits code directly; the MLIR stub
-consumes either the Python data model or the serialized form.
-
-## 5. Invariants and gotchas
+## 4. Invariants and gotchas
 
 - **Exactly one `Return` per block** — the constructor asserts this; raise
   early rather than silently drop ops.
@@ -175,10 +156,10 @@ consumes either the Python data model or the serialized form.
 - **`Return.clone` asserts False** — returns should never be cloned; they mark
   function boundaries.
 - **Types are compared by `mangle()`** — when adding a new type, implement
-  `mangle`, `__hash__`, `__eq__`, `serialize`, `__str__`. Optionally
-  `get_generic()` so the pattern rewriter can match families.
+  `mangle`, `__hash__`, `__eq__`, `__str__`. Optionally `get_generic()` so
+  the pattern rewriter can match families.
 
-## 6. Extending the IR
+## 5. Extending the IR
 
 See `extending.md` for the full story. The short version:
 
@@ -186,8 +167,8 @@ See `extending.md` for the full story. The short version:
    explicitly; anything unsupported falls back via the generator context.
 2. **Add a new op only if it changes structure** (new kind of control flow,
    new closure convention, new binding-level construct). If you do, implement
-   all `Operation` abstracts, add a `serialize()` kind, update every back-end,
-   and consider whether it needs an entry in `opt/pattern_rewriter.py`.
+   all `Operation` abstracts, update every back-end, and consider whether it
+   needs an entry in `opt/pattern_rewriter.py`.
 3. **Add a new type only if the back-end needs to distinguish it at the
    runtime level.** Higher-level distinctions belong in `VirtualType`
    subclasses in `hipy/value.py`.
