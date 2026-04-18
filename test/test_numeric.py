@@ -279,7 +279,6 @@ def fn_float_format():
     print(f"{x:.4f}")
 
 
-@pytest.mark.xfail(reason="scalar.string.format_single not implemented in C++ backend (only in MLIR) — float.__format__ with format spec broken")
 def test_float_format():
     check_prints(fn_float_format, """
 3.14

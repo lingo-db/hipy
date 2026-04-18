@@ -416,6 +416,8 @@ class CPPBackend:
                 return f"{self.generate_result(op.result)} =  builtin::string::rfind({self.generate_value(op.args[0])},{self.generate_value(op.args[1])},{self.generate_value(op.args[2])},{self.generate_value(op.args[3])});"
             case "scalar.string.replace":
                 return f"{self.generate_result(op.result)} =  builtin::string::replace({self.generate_value(op.args[0])},{self.generate_value(op.args[1])},{self.generate_value(op.args[2])});"
+            case "scalar.string.format_single":
+                return f"{self.generate_result(op.result)} = std::vformat({self.generate_value(op.args[0])}, std::make_format_args({self.generate_value(op.args[1])}));"
             case "list.create":
                 return f"{self.generate_result(op.result)} = std::make_shared<std::vector<{self.generate_type(op.result.type.element_type)}>>();"
             case "list.append":
