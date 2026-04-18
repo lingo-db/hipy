@@ -331,6 +331,8 @@ class CPPBackend:
                         return f"{self.generate_result(op.result)} =  py::float_({self.generate_value(op.args[0])});"
             case "scalar.float.from_python":
                 return f"{self.generate_result(op.result)} =  {self.generate_value(op.args[0])}.cast<{self.generate_type(op.result.type)}>();"
+            case "scalar.float.from_string":
+                return f"{self.generate_result(op.result)} = std::stod({self.generate_value(op.args[0])});"
             case "scalar.float.from_int":
                 return f"{self.generate_result(op.result)} =  {self.generate_value(op.args[0])};"
             case "scalar.float.to_int":

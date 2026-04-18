@@ -264,7 +264,6 @@ def fn_float_from_string():
     print(float("-0.5"))
 
 
-@pytest.mark.xfail(reason="scalar.float.from_string not implemented in C++ backend — float(<str>) broken")
 def test_float_from_string():
     check_prints(fn_float_from_string, """
 3.25
