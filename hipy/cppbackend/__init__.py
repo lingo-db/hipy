@@ -258,6 +258,8 @@ class CPPBackend:
                 return binary_op(lambda x, y: f"{x}/{y}")
             case "scalar.int.mod":
                 return binary_op(lambda x, y: f"{x}%{y}")
+            case "scalar.int.xor":
+                return binary_op(lambda x, y: f"{x}^{y}")
             case "scalar.int.compare.lt":
                 return binary_op(lambda x, y: f"{x}<{y}")
             case "scalar.int.compare.gt":

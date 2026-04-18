@@ -157,7 +157,6 @@ def fn_int_invert():
     print(~not_constant(5))
 
 
-@pytest.mark.xfail(reason="scalar.int.xor not implemented in C++ backend — int.__invert__ broken")
 def test_int_invert():
     check_prints(fn_int_invert, """
 -6
