@@ -1239,12 +1239,17 @@ def rewrite_loop_break(body):
                 encapsulated = ast.If(test=ast.Name(id=rewriter.variable_name, ctx=ast.Load(), lineno=node.lineno,
                                                     col_offset=node.col_offset), body=new_body, orelse=[],
                                       lineno=node.lineno, col_offset=node.col_offset)
+                guarded_test = ast.BoolOp(
+                    op=ast.And(),
+                    values=[ast.Name(id=rewriter.variable_name, ctx=ast.Load(), lineno=node.lineno,
+                                     col_offset=node.col_offset), node.test],
+                    lineno=node.lineno, col_offset=node.col_offset)
                 return [
                     ast.Assign(targets=[ast.Name(id=rewriter.variable_name, ctx=ast.Store(), lineno=node.lineno,
                                                  col_offset=node.col_offset)],
                                value=ast.Constant(value=True, lineno=node.lineno, col_offset=node.col_offset),
                                lineno=node.lineno, col_offset=node.col_offset),
-                    ast.While(test=node.test, body=[encapsulated], orelse=node.orelse,
+                    ast.While(test=guarded_test, body=[encapsulated], orelse=node.orelse,
                               lineno=node.lineno, col_offset=node.col_offset)
                 ]
             else:

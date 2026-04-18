@@ -36,7 +36,6 @@ def fn_while_break():
     print(x)
 
 
-@pytest.mark.xfail(reason="BUG: abstract while-loop with break does not terminate (compiles, runs forever)", run=False, strict=True)
 def test_while_break():
     check_prints(fn_while_break, """
 5
