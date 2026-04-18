@@ -366,6 +366,8 @@ class CPPBackend:
                 return f"{self.generate_result(op.result)} =  std::asin({self.generate_value(op.args[0])});"
             case "scalar.float.acos":
                 return f"{self.generate_result(op.result)} =  std::acos({self.generate_value(op.args[0])});"
+            case "scalar.float.atan2":
+                return f"{self.generate_result(op.result)} =  std::atan2({self.generate_value(op.args[0])},{self.generate_value(op.args[1])});"
             case "scalar.float.pow":
                 return f"{self.generate_result(op.result)} =  std::pow({self.generate_value(op.args[0])},{self.generate_value(op.args[1])});"
             case "random.rand":

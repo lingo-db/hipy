@@ -68,7 +68,6 @@ def fn_atan2():
     print(math.atan2(not_constant(0.0), not_constant(1.0)))
 
 
-@pytest.mark.xfail(reason="scalar.float.atan2 not implemented in C++ backend")
 def test_atan2():
     check_prints(fn_atan2, """
 0.0
