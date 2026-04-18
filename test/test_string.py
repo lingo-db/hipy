@@ -352,7 +352,6 @@ def fn_string_slice_negative_step():
     print(s[::-1])
 
 
-@pytest.mark.xfail(reason="str.__getitem__ slice default start/stop (0, len) produces empty range when step is negative — negative-step slicing broken")
 def test_string_slice_negative_step():
     check_prints(fn_string_slice_negative_step, """
 fedcba

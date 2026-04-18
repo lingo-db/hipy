@@ -852,14 +852,19 @@ class str(Value):
             return intrinsics.call_builtin("scalar.string.at", str, [self, item])
         elif intrinsics.isa(item, slice):
             length = len(self)
-            start = item.start if item.start is not None else 0
-            stop = item.stop if item.stop is not None else length
-            start = start if start >= 0 else length + start
-            stop = stop if stop >= 0 else length + stop
+            step = item.step if item.step is not None else 1
+            if item.start is not None:
+                start = item.start if item.start >= 0 else length + item.start
+            else:
+                start = 0 if step > 0 else length - 1
+            if item.stop is not None:
+                stop = item.stop if item.stop >= 0 else length + item.stop
+            else:
+                stop = length if step > 0 else -1
             if item.step is None:
                 return intrinsics.call_builtin("scalar.string.substr", str, [self, start, stop])
             else:
-                return "".join([self[i] for i in range(start, stop, item.step)])
+                return "".join([self[i] for i in range(start, stop, step)])
         else:
             intrinsics.not_implemented()
 
