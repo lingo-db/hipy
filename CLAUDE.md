@@ -26,7 +26,7 @@ reading order. The docs are organized by logical component:
 | `docs/intrinsics.md` | Library-author API |
 | `docs/runtime-glue.md` | Decorators, closures, test helpers |
 | `docs/standard-library.md` | Every `hipy/lib/` shim |
-| `docs/optimizations.md` | Passes in `hipy/opt/` including dccg |
+| `docs/optimizations.md` | Passes in `hipy/opt/` |
 | `docs/cpp-backend.md` | IR → C++ + Arrow runtime |
 | `docs/mlir-backend.md` | Prototype MLIR backend (stub) |
 | `docs/tests.md` | Test layout + `check_prints` idiom |

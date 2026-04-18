@@ -31,7 +31,7 @@ codebase.
 | [`intrinsics.md`](intrinsics.md) | Library-author API: `call_builtin`, `bind`, `isa`, `typeof`, `only_implemented_if`, etc. | `hipy/intrinsics.py` |
 | [`runtime-glue.md`](runtime-glue.md) | Decorators, `HLCFunction`/`HLCMethod`, closure machinery, test helpers | `hipy/__init__.py`, `decorators.py`, `function.py`, `internal_values.py`, `binding.py`, `interpreter.py`, `test_utils.py` |
 | [`standard-library.md`](standard-library.md) | The `hipy/lib/` shims — builtins (int/str/list/dict/…), `_tabular` (column/table), numpy, pandas, sklearn, math, statistics, pickle, urllib, collections | `hipy/lib/**` |
-| [`optimizations.md`](optimizations.md) | Pattern rewriter, canonicalization, DCE, inlining, `eager_free`, array/tabular fusion, `dccg` (data-centric codegen) | `hipy/opt/**` |
+| [`optimizations.md`](optimizations.md) | Pattern rewriter, canonicalization, DCE, inlining, `eager_free`, array/tabular fusion | `hipy/opt/**` |
 | [`cpp-backend.md`](cpp-backend.md) | The C++ backend — IR→C++ codegen, Arrow integration, numpy ndarray, runtime headers, CMake build | `hipy/cppbackend/**`, `cppbackend/*.h` |
 | [`mlir-backend.md`](mlir-backend.md) | Prototype MLIR backend via LingoDB — subset-only, research-only | `hipy/mlirbackend/__init__.py` |
 | [`tests.md`](tests.md) | Test layout, `check_prints` idiom, `not_constant` usage | `test/**` |

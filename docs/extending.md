@@ -346,8 +346,9 @@ Mirrors `hipy/mlirbackend/__init__.py`'s shape:
    complete one.
 
 4. If your target has structured control flow ops (loops, joins),
-   consider extending `cppir.py`-style backend-specific ops + a
-   `rewrite_cpp`-style lowering pass.
+   consider extending the backend with backend-specific IR op classes
+   (see the historical `cppir.py` scaffolding) plus a lowering pass
+   that rewrites generic ops into them before codegen.
 
 5. Optional: a runtime header library (analog to `cppbackend/builtin*.h`)
    providing the target-language implementations of every builtin.

@@ -2,15 +2,18 @@
 
 **Files:** `pattern_rewriter.py`, `canonicalization.py`,
 `eliminate_dead_code.py`, `eliminate_dead_symbols.py`, `inline.py`,
-`eager_free.py`, `array_patterns.py`, `tabular_patterns.py`,
-`rewrite_cpp.py`, `dccg.py`.
+`eager_free.py`, `array_patterns.py`, `tabular_patterns.py`.
 
 After the generator has emitted IR via `hipy/compiler.py` + `hipy/context.py`,
 the module passes through a sequence of optimization passes before the
 backend lowers it further. Passes are thin: most are a handful of pattern
-match arms around a `PatternRewriter`. The heavy lifting lives in
-`dccg.py` (data-centric codegen), which is where pandas/DataFrame workloads
-get their JIT-equivalent speed via operator-fusion.
+match arms around a `PatternRewriter`.
+
+> **Historical note:** the OOPSLA'24 prototype also shipped a
+> data-centric codegen pass (`dccg.py`) and a pre-backend lowering pass
+> (`rewrite_cpp.py`). Both were removed after it turned out they were no
+> longer wired into any entry point. The `cppir` module still defines the
+> operator classes they used to emit, but nothing produces them today.
 
 ## 1. `pattern_rewriter.py` — the rewrite driver
 
@@ -147,117 +150,11 @@ Patterns registered by `rewrite_set_column(module)`:
 Every fused function captures the pass-specific `fused_cntr` to get a
 unique name. The resulting ops (`table.compute`, `table.filter_by_func`,
 `table.add_index_column`) are the normalized relational primitives that
-`dccg.py` then consumes.
+the backend consumes directly.
 
-## 4. `dccg.py` — data-centric code generation
+## 4. Pipeline ordering (as invoked by `hipy.compiler.compile` + backend)
 
-**This is the "query compiler" pass.** Name comes from the Neumann-style
-"data-centric compilation" idea (Produce/Consume operator model). Handles
-pandas/table pipelines in one go: takes a DAG of `table.compute` /
-`table.filter_by_func` / `table.select` / `table.add_index_column` /
-`table.join_inner` / `table.join_left` / `table.aggregate` ops rooted at
-some "materialization" boundary (a non-table op that consumes a table)
-and produces a *single* C++-backend pipeline that:
-
-1. Allocates any hash tables / aggregation hash tables / builders,
-2. Scans base tables once,
-3. Pipes tuples through joins, filters, maps without intermediate table
-   materialization,
-4. Emits exactly one final `TableBuilderFinish` at the end.
-
-### 4.1 The operator tree
-
-Every relational op becomes a Python class implementing
-`produce(required_cols, block, module, parent)` and
-`consume(cols, block, module)` — the classic Neumann "produce/consume"
-interface.
-
-| Class | Role | Emits |
-|---|---|---|
-| `TableScan(table)` | Leaf: iterate a base table | `cppir.IterateTable` |
-| `InnerJoin(left, right, left_key, right_key, left_keep, right_keep, …)` | Hash join; right side builds, left probes | `cppir.CreateJoinHt`, `JoinHtInsert`, `JoinHtBuild`, `JoinHtLookup` |
-| `LeftJoin(…)` | Same as InnerJoin + a `cppir.CreateFlag`/`SetFlag`/`CheckFlag` for null padding | Adds `ir.IfElse` with NaN constants on the right cols |
-| `Aggregation(group_by, input, output, child, init_fn, agg_fn, finalize_fn, …)` | Hash aggregation with init/accumulate/finalize | `cppir.CreateAggregationHt`, `Aggregate`, `IterateAggregationHt` |
-| `Project(cols, child)` | Pass-through (erases uncols in `required_cols` propagation) | — |
-| `AddIndexColumn(col, child)` | Appends a running counter column | `cppir.CreateCounter`, `IncrementCounter` |
-| `Filter(required_cols, child, filter_fn)` | Predicate | `ir.IfElse` wrapping the consume |
-| `Map(required_cols, output_cols, child, map_fn)` | Scalar computation | Calls `map_fn`, unpacks record if multi-output |
-| `Materialize(required_cols, child)` | Sink: accumulates results into a table builder | `cppir.CreateTableBuilder`, `TableBuilderAppend`, `TableBuilderFinish` |
-
-Pattern: the root of the tree is always a `Materialize`, and leaves are
-always `TableScan`s. `produce()` walks from root to leaves (to allocate
-state in order); `consume()` walks back up through the `parent` pointer
-(to wire tuples through).
-
-### 4.2 The tree builder — `RelRewriter`
-
-`RelRewriter.construct_tree(v, rewriter, first=False)` recursively turns a
-`CallBuiltin` DAG rooted at the SSA value `v` into the operator tree
-above. Highlights:
-
-- The `first` flag is set at the root — the root becomes a `Materialize`,
-  ensuring a table builder is emitted at the top.
-- `sort_irelevant` forwards sort semantics through operators that don't
-  care about row order (e.g. `Aggregation` consumes its input in any
-  order).
-- **Multi-use guard.** If a value has more than one use in the surrounding
-  module, the rewriter builds a sub-tree for it, *materializes it
-  separately* (emits a `Materialize` for just that sub-tree), and then
-  treats it as a `TableScan` of the new materialized table. This avoids
-  the combinatorial blow-up of inlining a shared subplan twice.
-- Unknown producers bottom out as `TableScan(v)` — a leaf that just
-  iterates the already-materialized table.
-
-### 4.3 The tree optimizer — `optimize(tree)`
-
-Tiny; currently limited to:
-
-- Pulling `Map`s above `InnerJoin`s when the mapped cols aren't join
-  keys, so map evaluation happens after the join reduces the data.
-- Pulling `Filter`s above `InnerJoin`s unconditionally (filters always
-  commute with inner join over the non-join side).
-
-Both rewrites recurse into the lifted operator's `.child`, so the
-optimizer cascades.
-
-### 4.4 The trigger — `RelRewriter.rewrite(op)`
-
-Only fires on ops that *consume* a table but are not themselves
-relational producers (i.e., the "boundary" between relational and
-non-relational). Explicit bail-outs for each table-producing CallBuiltin
-prevent the pattern from matching mid-tree.
-
-For each table-typed arg of the triggering op, it builds the tree,
-optimizes it, emits `produce([], …)` into a fresh insertion point before
-the arg's producer, and replaces the arg's producer result with the tree's
-materialized output. The `IfElse` bail-out (`case ir.IfElse: return False`)
-keeps the pass from mangling structured control flow.
-
-`rewrite(module)` is the public entry.
-
-## 5. `rewrite_cpp.py` — final IR → cppir lowering
-
-After all optimization passes have run, `rewrite_cpp.rewrite(module)`
-lowers the two remaining control-flow builtins to the C++ backend's
-equivalents:
-
-- `range.iter(func, read_only, iter_vals, start, end, step)` →
-  `cppir.IterRange` with an inner block that unpacks `iter_vals`,
-  calls `func` per iteration, and yields the updated iter_vals record.
-- `while.iter(cond_func, body_func, read_only, iter_vals)` →
-  `cppir.WhileIter` with a `cond_block` (calls `cond_func`, yields bool) and
-  `iter_block` (calls `body_func`, yields new iter_vals).
-
-There's also a `FusePyMethodCall` pattern (defined but not in the default
-pattern list of `rewrite`) that folds
-`PythonCall(PyGetAttr(on, method), args)` into a single
-`cppir.PyMethodCall(on, method_str, args)` when the `PyGetAttr` has only
-that one use. Enable by adding it to the `PatternRewriter` list if
-measured useful.
-
-## 6. Pipeline ordering (as invoked by `hipy.compiler.compile` + backend)
-
-Roughly, the order from raw generator output to `cppir`:
+Roughly, the order from raw generator output to the backend:
 
 1. `canonicalize` — collapse `RecordGet(MakeRecord)`.
 2. `inline.run` — inline regular `ir.Call`s to expose closure/FunctionRef
@@ -266,17 +163,15 @@ Roughly, the order from raw generator output to `cppir`:
 4. `canonicalize_array_ops` + `fuse_array_ops` — numpy fusion.
 5. `rewrite_set_column` — normalize table ops to `table.compute` /
    `table.filter_by_func` / `table.add_index_column`.
-6. `dccg.rewrite` — consume the relational DAG, emit a fused pipeline.
-7. `rewrite_cpp.rewrite` — lower `range.iter` / `while.iter` to `cppir`.
-8. `eager_free.run` — insert `ir.Free` after last uses.
-9. `eliminate_dead_symbols.run(module, root)` — drop unreachable functions.
-10. Backend codegen (`hipy.cppbackend.*`).
+6. `eager_free.run` — insert `ir.Free` after last uses.
+7. `eliminate_dead_symbols.run(module, root)` — drop unreachable functions.
+8. Backend codegen (`hipy.cppbackend.*`).
 
 Whether all passes are wired into a given entry point is best checked by
 grepping the backend driver — `hipy.cppbackend.__init__` and
 `compile.py` are the places to look.
 
-## 7. Gotchas for adding a pass
+## 5. Gotchas for adding a pass
 
 - **Every new pattern must keep `rewriter.uses` consistent.** Use
   `replace_with` / `replace_with_value` / `remove` helpers instead of
@@ -289,12 +184,6 @@ grepping the backend driver — `hipy.cppbackend.__init__` and
   hides everything below it. If you add a general canonicalization
   pattern, make sure it runs in a separate rewriter from the fusion
   patterns, or you'll lose fusion opportunities.
-- **DCCG assumes a single materialization boundary per tree.** If the
-  relational DAG has multiple consumers of the same intermediate table,
-  the multi-use guard builds a sub-materialization; but chained complex
-  DAGs can still miss fusion opportunities. Watch for
-  `table.get_column`/`table.length` at the consumer boundary if a
-  rewrite seems to stop short.
 - **`FuncManager` is stateful per fusion.** Don't share one between two
   independent rewrites — the closure-record slots get tangled.
 - **`fused_cntr` is module-global inside each file.** If you add another

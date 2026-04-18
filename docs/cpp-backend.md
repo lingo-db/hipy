@@ -23,8 +23,7 @@ HiPy function.
    calls `hipy.compiler.compile(fn, arg_types, fallback, debug)` to produce
    an `ir.Module`.
 2. The module is further optimized (canonicalize, inline, DCE, array/tabular
-   fusion, `dccg.rewrite`, `rewrite_cpp.rewrite`, `eager_free`,
-   `eliminate_dead_symbols`).
+   fusion, `eager_free`, `eliminate_dead_symbols`).
 3. `hipy.cppbackend.run(fn_name, module)` constructs a `CPPBackend(fn_name,
    module)` and calls its `run()`:
    - `generate_module()` emits forward declarations and function bodies
@@ -162,43 +161,21 @@ mapping, grouped by prefix:
 - **`python.<create_list|create_dict|create_slice|get_none|tuple_from_list>`** →
   pybind11 constructors.
 - **`dbg.print`** → `std::cout` / `std::endl` emission.
-- **`range.iter` / `while.iter`** — these are *not* handled here; they've
-  already been lowered to `cppir.IterRange` / `cppir.WhileIter` by
-  `opt/rewrite_cpp.py`.
+- **`range.iter` / `while.iter`** — handled here via the generic
+  builtin dispatch (no separate lowering pass).
 
 Every new IR builtin a library author introduces (via
 `intrinsics.call_builtin`) must get a handler here; otherwise `run()`
 fails at generation time with an unrecognized-name error.
 
-## 6. `cppir.py` — backend IR extensions
+## 6. `cppir.py` — backend IR extensions (historical)
 
 Each class subclasses `ir.Operation` and adds `produce(backend)` to emit
-C++ into the current block. Introduced by `opt/dccg.py` and
-`opt/rewrite_cpp.py`; never emitted by the frontend directly.
-
-| Class | C++ emission |
-|---|---|
-| `IterRange(iter_vals, iter_vals_type, start, end, step)` | `for (int64_t i = start; i < end; i += step) { … }` with a body block and an `iter_val_vars` dict reflecting loop-carried state. Produces a record with the final values. |
-| `WhileIter(read_only, iter_vals)` | Two blocks (`cond_block`, `iter_block`). Emits `while(cond()) { … }`. |
-| `IterateTable(table, required_cols)` | Uses `arrow::TableBatchReader` to iterate record batches; within each batch, loops rows and exposes per-column accessors as SSAs in `iter_block`. |
-| `CreateJoinHt(ht_type)` | Declares a `ds::JoinHashTable<KeysTuple, ValuesTuple>` local. |
-| `JoinHtInsert(ht, keys, values)` | `ht->insert(std::make_tuple(keys…), std::make_tuple(values…))`. |
-| `JoinHtBuild(ht)` | `ht->build()` — finalizes bucket structure. |
-| `JoinHtLookup(ht, keys)` | Opens an inner loop that iterates matches; `iter_vars` expose the value tuple. |
-| `CreateAggregationHt(ht_type)` | Hash-table on tuple keys → accumulator value type. |
-| `Aggregate(ht, key)` | `init_block` runs when key is new; `agg_block` runs when key exists; feed the accumulated value back in with `Yield`. |
-| `IterateAggregationHt(ht)` | Emits `for (auto& [k, v] : ht)` for final scan. |
-| `CreateFlag()` / `SetFlag` / `CheckFlag` | Local `bool` plus set/read — used by LeftJoin to detect unmatched rows. |
-| `CreateCounter()` / `IncrementCounter(counter)` | Local `int64_t` post-increment — used by `AddIndexColumn`. |
-| `CreateTableBuilder(types)` | Declares one column builder per target column. |
-| `TableBuilderAppend(tb, cols)` | Appends each value to its column builder. |
-| `TableBuilderFinish(tb, table_type)` | Flushes all builders and wraps the columns in `Table::from_columns(...)`. |
-| `PyMethodCall(on, method_str, args)` | Single `PyObject_CallMethodObjArgs` call — the fusion of `PyGetAttr`+`PythonCall` from `opt/rewrite_cpp.py::FusePyMethodCall`. |
-
-DCCG's produce/consume pattern (see `optimizations.md §4`) is what
-sequences these: `Materialize` creates the table builder, each operator
-inserts ops into successively nested blocks, leaves (`TableScan`) at the
-bottom open iteration over base tables.
+C++ into the current block. These ops were produced by the old
+`opt/dccg.py` and `opt/rewrite_cpp.py` passes, which have been removed;
+the classes remain defined in `hipy/cppbackend/cppir.py` but nothing
+currently emits them. Kept as scaffolding in case data-centric codegen is
+re-wired later.
 
 ## 7. Templates
 
@@ -316,8 +293,7 @@ Hand-rolled:
 - `TableBuilder` plumbing (chained column builders).
 
 Kept separate from Arrow because Arrow's compute kernels don't cover
-these exact patterns efficiently; the hand-rolled versions are what
-dccg's produce/consume pipelines target.
+these exact patterns efficiently.
 
 ## 9. Direct compile + output
 
@@ -353,20 +329,13 @@ End-to-end for `df.groupby("a").agg("sum")`:
 1. Frontend emits `table.aggregate(table, init_fn, agg_fn, finalize_fn,
    group_by=…, input=…, output=…)` via the pandas shim.
 2. `opt/tabular_patterns` normalizes any column-level prep.
-3. `opt/dccg.rewrite` sees a table consumer (the eventual DataFrame
-   return), builds an operator tree rooted at a `Materialize`, with
-   `Aggregation` as the middle node, `TableScan(table)` as the leaf.
-4. `produce()` emits `cppir.CreateTableBuilder`, `cppir.CreateAggregationHt`,
-   `cppir.IterateTable(table)`, `cppir.Aggregate(ht, key)`,
-   `cppir.IterateAggregationHt(ht)`, `cppir.TableBuilderAppend`,
-   `cppir.TableBuilderFinish` — in that nested order.
-5. The C++ backend emits: column builders as locals, a
-   `std::unordered_map` for the aggregation HT, an
-   `arrow::TableBatchReader` loop, a key-tuple construction per row,
-   insert-or-update with the init/agg functions inlined as `ir.Call` ops,
-   a final scan loop that calls `finalize_fn` per key, appends to builders,
-   then `Table::from_columns`.
-6. `eager_free` has already inserted `ir.Free` after the last use of the
+3. `generate_builtin` dispatches `table.aggregate` directly, emitting
+   column builders as locals, a `std::unordered_map` for the
+   aggregation HT, an `arrow::TableBatchReader` loop, key-tuple
+   construction per row, insert-or-update with the init/agg functions
+   inlined as `ir.Call` ops, a final scan loop that calls `finalize_fn`
+   per key, appends to builders, then `Table::from_columns`.
+4. `eager_free` has already inserted `ir.Free` after the last use of the
    original table so its shared_ptr drops as soon as the scan completes.
 
 All of this runs with no Python on the hot path — pandas is entered only
