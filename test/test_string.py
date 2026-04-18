@@ -321,7 +321,6 @@ def fn_string_isascii():
     print(not_constant("").isascii())
 
 
-@pytest.mark.xfail(reason="str.isascii returns True for non-ASCII strings — scalar.string.iter or ord() on abstract char doesn't report >127 for multi-byte UTF-8 chars")
 def test_string_isascii():
     check_prints(fn_string_isascii, """
 True

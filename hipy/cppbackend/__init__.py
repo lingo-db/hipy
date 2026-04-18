@@ -307,7 +307,7 @@ class CPPBackend:
             case "scalar.bool.not":
                 return f"{self.generate_result(op.result)} = !{self.generate_value(op.args[0])};"
             case "scalar.string.ord":
-                return f"{self.generate_result(op.result)} = (int64_t)({self.generate_value(op.args[0])}[0]);"
+                return f"{self.generate_result(op.result)} = (int64_t)(unsigned char)({self.generate_value(op.args[0])}[0]);"
             case "scalar.string.concatenate":
                 return binary_op(lambda x, y: f"{x}+{y}")
             case "scalar.int.to_string":
