@@ -1266,6 +1266,10 @@ def rewrite_loop_if_continue(body):
             node.body = rewrite_continue_in_loop_body(node.body)
             return node
 
+        def visit_While(self, node):
+            node.body = rewrite_continue_in_loop_body(node.body)
+            return node
+
     rewriter = RewriteLoopIfContinue()
     return [rewriter.visit(stmt) for stmt in body]
 

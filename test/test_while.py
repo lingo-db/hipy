@@ -55,7 +55,6 @@ def fn_while_continue():
     print(printed)
 
 
-@pytest.mark.xfail(reason="BUG: abstract while-loop with continue does not terminate", run=False, strict=True)
 def test_while_continue():
     check_prints(fn_while_continue, """
 3
