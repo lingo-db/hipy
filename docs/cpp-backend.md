@@ -2,7 +2,6 @@
 
 **Files:**
 - `hipy/cppbackend/__init__.py` (~1100 LOC) — the code generator driver
-- `hipy/cppbackend/cppir.py` (~625 LOC) — backend-only IR ops (extensions of `hipy.ir`)
 - `hipy/cppbackend/templates/standalone.cpp` — C++ `int main()` template
 - `hipy/cppbackend/templates/udf_eval.cpp` — Arrow-IPC UDF-benchmark template
 - `cppbackend/builtin.h` — core C++ runtime (containers, strings, helpers)
@@ -168,18 +167,9 @@ Every new IR builtin a library author introduces (via
 `intrinsics.call_builtin`) must get a handler here; otherwise `run()`
 fails at generation time with an unrecognized-name error.
 
-## 6. `cppir.py` — backend IR extensions (historical)
+## 6. Templates
 
-Each class subclasses `ir.Operation` and adds `produce(backend)` to emit
-C++ into the current block. These ops were produced by the old
-`opt/dccg.py` and `opt/rewrite_cpp.py` passes, which have been removed;
-the classes remain defined in `hipy/cppbackend/cppir.py` but nothing
-currently emits them. Kept as scaffolding in case data-centric codegen is
-re-wired later.
-
-## 7. Templates
-
-### 7.1 `standalone.cpp`
+### 6.1 `standalone.cpp`
 
 Header of the template (placeholder syntax):
 
@@ -229,24 +219,25 @@ int main(){
   `init_python` before the call (this is the pattern `compile.py` relies
   on for CLI inputs).
 
-### 7.2 `udf_eval.cpp`
+### 6.2 `udf_eval.cpp`
 
 A specialization used for the paper's UDF benchmarks: it loads a column
 from an Arrow IPC file, times a loop that invokes the compiled UDF on
 every row, writes a result column, then prints a JSON blob with `runtime`
-(seconds) and `res` (the result column serialized). Useful when
-benchmarking a UDF pipeline in isolation from the rest of a program.
+(seconds) and `res` (the result column serialized). No Python driver
+currently invokes this template — it is retained as documentation of the
+UDF-benchmark shape.
 
-## 8. Runtime headers
+## 7. Runtime headers
 
-### 8.1 `builtin.h` + `builtin_commons.h`
+### 7.1 `builtin.h` + `builtin_commons.h`
 
 Defines `builtin::string::*` helpers (upper/lower/find/substr/split/
 startswith), `bound_fn<>`, `std::hash<std::tuple<...>>` specialization
 (XOR-combine of member hashes so tuples work as `unordered_map` keys),
 and basic arithmetic / stream emission helpers.
 
-### 8.2 `builtin_arrow.h`
+### 7.2 `builtin_arrow.h`
 
 Real Apache Arrow integration. Key classes:
 
@@ -269,7 +260,7 @@ Real Apache Arrow integration. Key classes:
 All relational operations are expressed as Arrow compute calls or
 chunked iteration — there is no bespoke columnar storage.
 
-### 8.3 `builtin_numpy.h`
+### 7.3 `builtin_numpy.h`
 
 `ndarray<T,D>` is a **view**: pointer, shape, strides, offset. Heap-held
 through `std::shared_ptr<ndarray_data<T>>`.
@@ -279,11 +270,11 @@ through `std::shared_ptr<ndarray_data<T>>`.
 - `materialize()` — produce a C-contiguous fresh copy.
 - `to_numpy()` — wrap in `py::array_t<T>` (materializes if view).
 
-### 8.4 `builtin_date.h`
+### 7.4 `builtin_date.h`
 
 Minimal date helpers (parsing, comparison). Used by date columns.
 
-### 8.5 `datastructures.h`
+### 7.5 `datastructures.h`
 
 Hand-rolled:
 - `JoinHashTable<KeysT, ValuesT>` — multi-map; `insert → build (sort
@@ -295,7 +286,7 @@ Hand-rolled:
 Kept separate from Arrow because Arrow's compute kernels don't cover
 these exact patterns efficiently.
 
-## 9. Direct compile + output
+## 8. Direct compile + output
 
 `write_compile_run_cpp` invokes the system C++ compiler directly (no
 CMake). The command, assembled in `_build_compile_command`, is:
@@ -322,7 +313,7 @@ Relevant env vars:
 
 `ccache` and `ld.lld` are optional and picked up via `shutil.which`.
 
-## 10. Lifecycle example — pandas GROUP BY
+## 9. Lifecycle example — pandas GROUP BY
 
 End-to-end for `df.groupby("a").agg("sum")`:
 
@@ -343,7 +334,7 @@ via `.to_python()` at the final boundary, which calls
 `arrow::py::wrap_table()` to produce a zero-copy pyarrow.Table that
 pandas can wrap.
 
-## 11. Gotchas
+## 10. Gotchas
 
 - **`unordered_map` with tuple keys needs a `std::hash` specialization.**
   `builtin.h` provides one via recursive XOR-combine. If you extend the

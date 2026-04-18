@@ -338,8 +338,8 @@ experiments run once for warmup + 3 measured runs, median reported, stdev <5%.
 | CPython embedding at runtime | `hipy/binding.py`, `cppbackend/*.h`, `hipy/interpreter.py` |
 | Transformed-function runtime | `hipy/function.py` |
 | Standard-library shims | `hipy/lib/{builtins.py,numpy,pandas,sklearn,urllib,math.py,statistics.py,scipy,pickle.py,collections,_tabular.py}` |
-| Optimization passes | `hipy/opt/{inline,canonicalization,eliminate_dead_code,eliminate_dead_symbols,pattern_rewriter,array_patterns,tabular_patterns,dccg,eager_free,rewrite_cpp}.py` |
-| C++ back-end (IR → C++) | `hipy/cppbackend/{cppir.py,templates/}` |
+| Optimization passes | `hipy/opt/{inline,canonicalization,eliminate_dead_code,eliminate_dead_symbols,pattern_rewriter,array_patterns,tabular_patterns,eager_free}.py` |
+| C++ back-end (IR → C++) | `hipy/cppbackend/{__init__.py,templates/}` |
 | C++ runtime (Arrow, numpy views, pybind11, string ops, dates, JSON) | `cppbackend/*.h` |
 | MLIR back-end stub | `hipy/mlirbackend/` |
 | Tests mirroring paper features | `test/test_*.py` (+ `test/{numpy,pandas,sklearn,urllib,opt,examples}/`) |

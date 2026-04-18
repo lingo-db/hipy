@@ -1099,7 +1099,6 @@ class CPPBackend:
                 raise NotImplementedError(f"builtin {op.name} not implemented")
 
     def generate_op(self, op):
-        import hipy.cppbackend.cppir as cppir
         match op:
             case ir.Undef(result=r):
                 return f"{self.generate_result(op.result)} = {{}};"
@@ -1174,9 +1173,6 @@ class CPPBackend:
     """
             case ir.Call(name=func, args=args, result=r):
                 return f"{self.generate_result(r)} = {func}({', '.join(map(self.generate_value, args))});"
-
-            case cppir.CppOp():
-                return op.produce(self)
 
             case ir.CallIndirect(fnref=fnref, args=args, result=r):
                 return f"{self.generate_result(r)} = ({self.generate_value(fnref)})({', '.join(map(self.generate_value, args))});"

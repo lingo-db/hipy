@@ -12,8 +12,8 @@ match arms around a `PatternRewriter`.
 > **Historical note:** the OOPSLA'24 prototype also shipped a
 > data-centric codegen pass (`dccg.py`) and a pre-backend lowering pass
 > (`rewrite_cpp.py`). Both were removed after it turned out they were no
-> longer wired into any entry point. The `cppir` module still defines the
-> operator classes they used to emit, but nothing produces them today.
+> longer wired into any entry point, along with the backend-only
+> `cppir` op module they emitted into.
 
 ## 1. `pattern_rewriter.py` — the rewrite driver
 
@@ -90,8 +90,8 @@ operand. Assumes every function has a single `Return` (the generator's
 invariant).
 
 Run *aggressively* after cogen to enable subsequent pattern matching —
-e.g., `FuseColumnApply` and the dccg rewriter rely on seeing the raw
-`FunctionRef`-to-closure chains, not abstract calls.
+e.g., `FuseColumnApply` relies on seeing the raw `FunctionRef`-to-closure
+chains, not abstract calls.
 
 ### `eager_free.py`
 
