@@ -24,7 +24,6 @@ def fn_format_basic():
     print("no fields".format())
 
 
-@pytest.mark.xfail(reason="empty '{}' spec is translated to '' — see bugs-with-increased-cov.md #1")
 def test_format_basic():
     check_prints(fn_format_basic, """
 42

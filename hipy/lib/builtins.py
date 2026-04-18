@@ -1022,9 +1022,10 @@ class _const_str(CValue, str):
         """
         import re
 
-        # Empty spec → empty C++ spec
+        # Empty spec → default "{}" so std::vformat invokes the default
+        # formatter for the argument (rather than emitting an empty literal).
         if py == "":
-            return ""
+            return "{}"
 
         # Regex for the common subset:
         #

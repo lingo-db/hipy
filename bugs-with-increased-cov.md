@@ -6,22 +6,18 @@ as reproducers.
 
 ---
 
-## 1. `str.format()` with empty spec `"{}"` produces the empty string
+## 1. `str.format()` with empty spec `"{}"` produces the empty string — **FIXED**
 
-**Location:** `hipy/lib/builtins.py:1017-1027` — `_const_str.translate_python_spec_to_cpp`.
+**Was:** `hipy/lib/builtins.py` — `_const_str.translate_python_spec_to_cpp`.
 
-When the Python spec is empty (i.e. `"{}"`), the translator returns
-`""` and emits `std::vformat("", ...)`, which produces the empty
-string. It should return `"{}"` so the default formatter for the
-argument is invoked.
+When the Python spec was empty (e.g. `"{}"`), the translator returned
+`""` so the generated C++ call was `std::vformat("", arg)` — producing
+an empty string instead of formatting `arg`.
 
-**Reproducer:** `test/test_string_format.py::test_format_basic` (xfail).
+**Fix:** return `"{}"` for the empty spec so `std::vformat` invokes the
+default formatter for the argument.
 
-    "{}".format(42)           # expected: "42",  actual: ""
-    "a={} b={}".format(1, 2)  # expected: "a=1 b=2", actual: "a= b="
-
-**Fix sketch:** in `translate_python_spec_to_cpp`, return `"{}"` for
-empty input rather than `""`.
+**Regression test:** `test/test_string_format.py::test_format_basic`.
 
 ---
 
