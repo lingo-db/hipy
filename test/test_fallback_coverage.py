@@ -21,10 +21,13 @@ writing):
   1521   list.__setitem__ with non-int key / mismatched value type
 """
 
+import datetime
+
 import pytest
 
 import hipy
 from hipy import intrinsics
+import hipy.lib.datetime
 from hipy.interpreter import check_prints
 from hipy.test_utils import not_constant
 
@@ -165,6 +168,43 @@ def test_list_mul_non_int_falls_back():
 # ---------------------------------------------------------------------------
 # dict fallbacks
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# datetime fallbacks
+# ---------------------------------------------------------------------------
+
+
+@hipy.compiled_function
+def fn_date_eq_non_date_falls_back():
+    # date == non-date — hipy/lib/datetime.py:88 not_implemented(). Python's
+    # real date.__eq__ returns False for non-date rhs, and the fallback
+    # should reproduce that.
+    d = datetime.date(2024, 5, 16)
+    print(d == not_constant("2024-05-16"))
+    print(d != not_constant("2024-05-16"))
+
+
+def test_date_eq_non_date_falls_back():
+    check_prints(fn_date_eq_non_date_falls_back, """
+False
+True
+""", fallback=True)
+
+
+@hipy.compiled_function
+def fn_timedelta_eq_non_timedelta_falls_back():
+    # timedelta == non-timedelta — hipy/lib/datetime.py:230 not_implemented().
+    t = datetime.timedelta(5)
+    print(t == not_constant(5))
+    print(t != not_constant(5))
+
+
+def test_timedelta_eq_non_timedelta_falls_back():
+    check_prints(fn_timedelta_eq_non_timedelta_falls_back, """
+False
+True
+""", fallback=True)
 
 
 @hipy.compiled_function
