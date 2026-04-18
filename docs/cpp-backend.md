@@ -31,12 +31,16 @@ HiPy function.
      for every `ir.Function` in the module.
    - The result is interpolated into the Jinja2 template
      `templates/standalone.cpp` producing a single `standalone.cpp` source.
-4. The source is written under a build dir (`$HIPY_STANDALONE_SOURCE`,
-   default inside the repo), then `cmake --build <build-dir> --target
-   standalone` invokes the system C++ compiler (via the adjacent
-   `CMakeLists.txt`) linking pybind11 + Apache Arrow.
+4. `write_compile_run_cpp` writes the source to a fresh
+   `tempfile.TemporaryDirectory`, assembles a compile command directly
+   (no CMake) by querying `sysconfig`, `pybind11`, `pyarrow` for
+   include / lib paths, and invokes the system C++ compiler once per
+   test. `ccache` and `ld.lld` are picked up automatically if in
+   `PATH`.
 5. The resulting binary is executed as a subprocess with `PYTHONPATH`
    threaded through; stdout/stderr/returncode are captured and returned.
+   The tempdir is deleted on scope exit — tests are fully independent,
+   so `pytest -n auto` parallelizes safely.
 
 > Tests that use `binding.check_prints` cover this whole loop end-to-end.
 > The "standalone binary" pattern is what makes HiPy's integration tests
@@ -58,15 +62,16 @@ One large class. Members of note:
 | `generate_builtin(op)` | ~700-line `match` over `op.name` — the mapping from every IR builtin name to its C++ idiom. Grouped by namespace (scalar, list, dict, string, array, table, column, python, dbg, …). |
 | `generate_function(fn)` | Renders function signature + body via Jinja2. Always void return at the module level; values flow through output parameters for tables/columns that own heap data. |
 | `generate_module()` | Forward-declare all functions in dependency order, then emit bodies. |
-| `run()` | Assembles template inputs + renders + writes + invokes CMake. |
+| `run()` | Assembles template inputs + renders. |
 
 Two helper free functions:
 
 - `get_column_builder(t)`, `get_column_accessor(t)` — map element IR types
   to the matching Arrow-builder / Arrow-accessor C++ class
   (`Int64ColumnBuilder`, `StrColumnBuilder`, `BoolColumnAccessor`, …).
-- `write_compile_run_cpp(code, debug)` — dumps the string, drives CMake,
-  runs the binary, captures output.
+- `write_compile_run_cpp(code, debug)` — writes the rendered source to
+  a tempdir, invokes the compiler directly, runs the binary, captures
+  output.
 
 ## 3. Type lowering
 
@@ -314,18 +319,32 @@ Kept separate from Arrow because Arrow's compute kernels don't cover
 these exact patterns efficiently; the hand-rolled versions are what
 dccg's produce/consume pipelines target.
 
-## 9. CMake + output
+## 9. Direct compile + output
 
-`cppbackend/CMakeLists.txt` declares a `standalone` target that compiles
-the emitted `standalone.cpp` and links:
-- pybind11 (header-only + the Python embedded library),
-- Apache Arrow (`arrow_shared`, `parquet_shared`, `arrow_python` when
-  Python is enabled),
-- the repo's `builtin.h` headers (include path).
+`write_compile_run_cpp` invokes the system C++ compiler directly (no
+CMake). The command, assembled in `_build_compile_command`, is:
 
-`HIPY_STANDALONE_SOURCE` and `HIPY_STANDALONE_BUILD` env vars override the
-in-tree locations. Default is something under `cppbackend/` — grep for
-those names if the build is failing mysteriously.
+```
+[ccache] $CXX -std=c++20 -march=native -fvisibility=hidden {-O0 -g | -O3 -DNDEBUG}
+    [-fuse-ld=lld if ld.lld is in PATH]
+    -I{pybind11.get_include()}
+    -I{sysconfig.get_path('include')}
+    -I{pyarrow.get_include()}
+    -I{HIPY_STANDALONE_SOURCE}        # header bundle (builtin.h, …)
+    /tmp/hipy-cpp-XXXX/standalone.cpp
+    -o /tmp/hipy-cpp-XXXX/standalone
+    -L{pyarrow.get_library_dirs()[0]} -Wl,-rpath,{same}
+    -larrow -larrow_compute -larrow_python
+    -L{sysconfig LIBDIR} -Wl,-rpath,{same}
+    -lpython{sysconfig LDVERSION}
+```
+
+Relevant env vars:
+- `HIPY_STANDALONE_SOURCE` — header location (defaults to repo's
+  `cppbackend/`). There is no longer a build directory.
+- `CXX` — compiler override; defaults to `g++`, falls back to `c++`.
+
+`ccache` and `ld.lld` are optional and picked up via `shutil.which`.
 
 ## 10. Lifecycle example — pandas GROUP BY
 

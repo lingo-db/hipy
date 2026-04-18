@@ -17,7 +17,7 @@ reading order. The docs are organized by logical component:
 | Doc | What it covers |
 |---|---|
 | `docs/index.md` | Index + reading order |
-| `docs/setup.md` | **How to build + run** — venv, pyarrow symlinks, CMake, env vars, `pytest`, `compile.py`. Go here first if the repo isn't built yet on this machine. |
+| `docs/setup.md` | **How to build + run** — venv, pyarrow symlinks, pytest, `compile.py`. Go here first if the repo isn't set up yet on this machine. |
 | `docs/extending.md` | **How to add things** — shims, virtual types, IR builtins, passes, backends. Go here first when the task is "add X". |
 | `docs/ir.md` | IR types, SSA, ops, modules |
 | `docs/compiler.md` | AST rewrite (cogen) + IR-gen loop |
@@ -35,30 +35,8 @@ Each doc ends with a **Gotchas** section capturing non-obvious
 invariants. When a test fails unexpectedly or an edit breaks something,
 check the gotchas first.
 
-## Quick-start (assuming setup is done)
-
-Two env vars must be set in every shell that runs `pytest` or
-`compile.py` (see `docs/setup.md` for first-time setup):
-
-```bash
-source .venv/bin/activate
-export HIPY_STANDALONE_SOURCE=$(pwd)/cppbackend
-export HIPY_STANDALONE_BUILD=/tmp/hipy-generator   # or wherever you configured CMake
-export PYTHONPATH=".:$PYTHONPATH"
-
-pytest test                                        # full test suite (C++ backend)
-pytest test/test_hello_world.py                    # single file
-python compile.py <file> <fn> '["int"]'            # MLIR dump for one function
-```
-
-If `pytest` hangs on the first test, `HIPY_STANDALONE_BUILD` is unset
-or points to a non-configured directory — see `docs/setup.md §4`.
-
 ## Workflow hints
 
-- **Setting up a fresh checkout**: follow `docs/setup.md` end-to-end
-  before anything else. Missing env vars are the #1 cause of spurious
-  test failures.
 - **New feature / bugfix**: skim the relevant component doc(s), then
   look at the source. The docs point to specific files and often
   specific methods.
@@ -67,8 +45,29 @@ or points to a non-configured directory — see `docs/setup.md §4`.
 - **Writing tests**: `docs/tests.md` describes the `check_prints` idiom
   and the `not_constant(...)` pattern used to defeat constant folding.
 - **Debugging a compile error from the C++ backend**: `docs/cpp-backend.md`
-  explains the CMake / pybind11 / Arrow setup and where the generated
-  source lands.
+  explains the direct-compile flow (pybind11 / Arrow include + link
+  discovery) and where the generated source lands.
+  
+## Running the test suite
+
+    Use the venv's pytest directly. Each test compiles its C++ into a
+    fresh tempdir, so there is no build directory to configure:
+
+        PYTHONPATH="." ./.venv/bin/pytest test
+
+    - Do **not** prepend `$PYTHONPATH` — pass `PYTHONPATH="."` verbatim.
+    - `HIPY_STANDALONE_SOURCE` defaults to the repo's `cppbackend/`
+      (header location); don't set it.
+    - Add `-n auto` to compile/run tests in parallel (pytest-xdist).
+
+    Single file / filter:
+
+        PYTHONPATH="." ./.venv/bin/pytest test/test_hello_world.py
+        PYTHONPATH="." ./.venv/bin/pytest test -k fannkuch
+
+    The main agent should invoke ./.venv/bin/pytest (not pytest via an activated venv) so a single approval covers repeated runs, and should drop
+     the source .venv/bin/activate && export ... preamble that triggered extra prompts.
+
 
 ## Keeping the docs fresh
 

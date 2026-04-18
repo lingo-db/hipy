@@ -1,6 +1,10 @@
 import os
 import pathlib
+import shutil
+import subprocess
 import sys
+import sysconfig
+import tempfile
 import textwrap
 from typing import Any, Dict
 
@@ -14,36 +18,68 @@ template_dir = os.path.join(current_dir, 'templates')
 template_loader = FileSystemLoader(searchpath=template_dir)
 env = Environment(loader=template_loader)
 
-import subprocess
+
+def _default_source_dir():
+    return str((pathlib.Path(__file__).parent / ".." / ".." / "cppbackend").resolve())
+
+
+def _build_compile_command(cpp_path, out_path, release):
+    import pybind11
+    import pyarrow
+
+    python_include = sysconfig.get_path("include")
+    python_libdir = sysconfig.get_config_var("LIBDIR")
+    python_ldversion = (sysconfig.get_config_var("LDVERSION")
+                        or f"{sys.version_info.major}.{sys.version_info.minor}")
+    pybind11_include = pybind11.get_include()
+    pyarrow_include = pyarrow.get_include()
+    pyarrow_libdir = pyarrow.get_library_dirs()[0]
+    source_dir = os.environ.get("HIPY_STANDALONE_SOURCE", _default_source_dir())
+
+    cmd = []
+    ccache = shutil.which("ccache")
+    if ccache:
+        cmd.append(ccache)
+    compiler = os.environ.get("CXX") or shutil.which("g++") or shutil.which("c++") or "c++"
+    cmd.append(compiler)
+    cmd += ["-std=c++20", "-march=native", "-fvisibility=hidden"]
+    cmd += (["-O3", "-DNDEBUG"] if release else ["-O0", "-g"])
+    if shutil.which("ld.lld"):
+        cmd.append("-fuse-ld=lld")
+    cmd += [
+        f"-I{pybind11_include}",
+        f"-I{python_include}",
+        f"-I{pyarrow_include}",
+        f"-I{source_dir}",
+        cpp_path,
+        "-o", out_path,
+        f"-L{pyarrow_libdir}",
+        f"-Wl,-rpath,{pyarrow_libdir}",
+        "-larrow", "-larrow_compute", "-larrow_python",
+    ]
+    if python_libdir:
+        cmd += [f"-L{python_libdir}", f"-Wl,-rpath,{python_libdir}"]
+    cmd.append(f"-lpython{python_ldversion}")
+    return cmd
 
 
 def write_compile_run_cpp(code, release=False):
-    standalone_project_path = f"{pathlib.Path(__file__).parent.resolve()}/../../cppbackend"
-    standalone_build_path = f"{standalone_project_path}/build-debug" if not release else f"{standalone_project_path}/build-release"
-    if "HIPY_STANDALONE_SOURCE" in os.environ:
-        standalone_project_path = os.environ["HIPY_STANDALONE_SOURCE"]
-    if "HIPY_STANDALONE_BUILD" in os.environ:
-        standalone_build_path = os.environ["HIPY_STANDALONE_BUILD"]
+    with tempfile.TemporaryDirectory(prefix="hipy-cpp-") as tmpdir:
+        cpp_path = os.path.join(tmpdir, "standalone.cpp")
+        out_path = os.path.join(tmpdir, "standalone")
+        with open(cpp_path, "w") as f:
+            f.write(code)
 
-    # Write the C++ code to a file
-    with open(f'{standalone_project_path}/standalone.cpp', 'w') as file:
-        file.write(code)
+        compile_cmd = _build_compile_command(cpp_path, out_path, release)
+        compile_proc = subprocess.Popen(compile_cmd, stderr=subprocess.PIPE)
+        _, compile_err = compile_proc.communicate()
+        if compile_proc.returncode != 0:
+            return (None, compile_err.decode("utf-8"), compile_proc.returncode)
 
-    cmake_command = ['cmake', '--build', standalone_build_path, '--target', 'standalone']
-    cmake_process = subprocess.Popen(cmake_command, stderr=subprocess.PIPE)
-    cmake_output, cmake_error = cmake_process.communicate()
-
-    if cmake_process.returncode != 0:
-        return (None, cmake_error.decode('utf-8'), cmake_process.returncode)
-
-    # Run the compiled binary
-    print(f"env PYTHONPATH={':'.join(sys.path)} {standalone_build_path}/standalone")
-    run_command = [f'{standalone_build_path}/standalone']
-    run_process = subprocess.Popen(run_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                   env={"PYTHONPATH": ':'.join(sys.path)})
-    run_output, run_error = run_process.communicate()
-
-    return (run_output.decode('utf-8'), run_error.decode('utf-8'), run_process.returncode)
+        run_proc = subprocess.Popen([out_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    env={"PYTHONPATH": ":".join(sys.path)})
+        run_out, run_err = run_proc.communicate()
+        return (run_out.decode("utf-8"), run_err.decode("utf-8"), run_proc.returncode)
 
 
 def get_column_builder(t):

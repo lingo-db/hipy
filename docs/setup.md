@@ -65,49 +65,36 @@ libraries after the downgrade — don't delete them.
 
 If you only care about `pytest` and not `compile.py`, skip this step.
 
-## 4. Configure the C++ backend
+## 4. C++ backend
 
-The backend uses an out-of-tree CMake build. Configure once per
-checkout:
+No configuration step. Each test compiles its generated C++ directly
+by invoking the system compiler on a freshly-written tempfile and
+running the resulting binary. `hipy/cppbackend/__init__.py` queries
+`sysconfig`, `pybind11`, and `pyarrow` to build the compile command
+and discovers `ccache` / `ld.lld` at runtime if present.
 
-```bash
-cd cppbackend
-touch standalone.cpp         # placeholder; compiler rewrites it per run
-export HIPY_STANDALONE_SOURCE=$(pwd)
-cmake -B /tmp/hipy-generator \
-      -DPYTHON_EXECUTABLE=/path/to/hipy/.venv/bin/python .
-export HIPY_STANDALONE_BUILD=/tmp/hipy-generator
-cd ..
-```
+Optional env vars:
 
-- `HIPY_STANDALONE_SOURCE` — directory containing `standalone.cpp`
-  (the file the compiler overwrites with generated code).
-- `HIPY_STANDALONE_BUILD` — CMake build directory. The backend runs
-  `cmake --build $HIPY_STANDALONE_BUILD --target standalone` for every
-  compile, so pick a persistent path (ccache relies on it to short-cut
-  rebuilds).
-- `-DPYTHON_EXECUTABLE=...` must point at the venv's `python`, else
-  CMake's `pyarrow.get_include()` shell-out uses the wrong interpreter
-  and the Arrow headers are invisible.
-
-See `docs/cpp-backend.md` for what each build artifact is.
+- `HIPY_STANDALONE_SOURCE` — directory of the header bundle
+  (`builtin.h`, `builtin_arrow.h`, …). Defaults to the repo's
+  `cppbackend/`; don't set it unless you moved the headers.
+- `CXX` — compiler to use. Defaults to `g++` (falls back to `c++`).
 
 ## 5. Running `pytest`
 
 ```bash
-export HIPY_STANDALONE_SOURCE=/path/to/hipy/cppbackend
-export HIPY_STANDALONE_BUILD=/tmp/hipy-generator
 export PYTHONPATH=".:$PYTHONPATH"
 source .venv/bin/activate
 pytest test                       # full suite
+pytest test -n auto               # parallel across all cores (pytest-xdist)
 pytest test/test_hello_world.py   # single file
 pytest test/ -k fannkuch          # filter
 HIPY_DEBUG=1 pytest test/         # enable Context sanity checks
 ```
 
-The first test invocation builds the C++ generator binary (slow,
-~30–60s). Subsequent runs reuse `HIPY_STANDALONE_BUILD` + ccache and
-are fast.
+Each test's compile lands in its own `tempfile.TemporaryDirectory`, so
+`-n auto` is safe. ccache, if installed, is transparently prepended to
+the compile command.
 
 See `docs/tests.md` for the `check_prints` idiom and `not_constant(...)`.
 
@@ -176,21 +163,14 @@ suite only needs the C++ backend. `compile.py` is not exercised in CI.
 
 ## 8. Gotchas
 
-- **Always activate the `.venv` before running CMake.** If you configure
-  with the system Python, pyarrow paths resolve against system pyarrow
-  (or not at all) and the link step fails on Arrow symbols.
-- **`HIPY_STANDALONE_SOURCE` / `HIPY_STANDALONE_BUILD` must be set for
-  every shell.** They're not persisted anywhere. A missing
-  `HIPY_STANDALONE_BUILD` manifests as the first `check_prints` hanging
-  or CMake complaining about an empty build dir.
+- **Activate the `.venv` before running pytest.** The compile command
+  is assembled from the active interpreter's `sysconfig` /
+  `pybind11.get_include()` / `pyarrow.get_include()`, so running under
+  the wrong Python silently links against the wrong pyarrow.
 - **The pyarrow/numpy downgrade from the lingodb wheels is sticky.**
   If you later `pip install -U pyarrow`, rerun `lingodbbridge` and it
   will assert on ABI mismatch. Keep 22.0.0 pinned while `compile.py`
   matters to you.
-- **`touch standalone.cpp` is not cargo-cult.** CMake's `add_executable`
-  requires the source file to exist at configure time; the compiler
-  later overwrites it. Skip the touch and configure fails.
-- **ccache is required by the CMakeLists.txt**, not optional — it's set
-  as `CMAKE_CXX_COMPILER_LAUNCHER` (see `cppbackend/CMakeLists.txt:5`).
-  A missing `ccache` binary manifests at build time, not configure
-  time; install it before running step 4.
+- **ccache and lld are optional** — the backend uses them if
+  `shutil.which` finds them, otherwise falls back to the bare compiler
+  and default linker.
