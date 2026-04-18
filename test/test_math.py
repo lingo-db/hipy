@@ -57,7 +57,6 @@ def fn_acos():
     print(math.acos(not_constant(1.0)))
 
 
-@pytest.mark.xfail(reason="math.acos emits scalar.float.acos but the C++ backend only implements scalar.float.arcsin")
 def test_acos():
     check_prints(fn_acos, """
 0.0
