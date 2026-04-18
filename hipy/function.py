@@ -3,9 +3,14 @@ import sys
 
 
 class HLCFunction:
-    def __init__(self, pyfunc, compiled_fn=None):
+    def __init__(self, pyfunc, compiled_fn=None, helper=False):
         self.pyfunc = pyfunc
         self.compiled_fn = compiled_fn
+        # Helper functions (e.g. private parsing helpers used by public methods)
+        # should never trigger the automatic pyobj fallback — they don't exist
+        # on the pyobj side. When one raises NotImplementedError the exception
+        # bubbles up to the caller so that the caller's own fallback applies.
+        self.helper = helper
 
     def get_compiled_fn(self):
         from hipy.compiler import stage_and_compile

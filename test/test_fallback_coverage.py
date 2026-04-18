@@ -23,8 +23,6 @@ writing):
 
 import datetime
 
-import pytest
-
 import hipy
 from hipy import intrinsics
 import hipy.lib.datetime
@@ -40,15 +38,13 @@ from hipy.test_utils import not_constant
 @hipy.compiled_function
 def fn_format_locale_n_falls_back():
     # "{:n}" — locale-aware integer format. Native translator at
-    # hipy/lib/builtins.py:1064 raises NotImplementedError, but the fallback
-    # re-enters the @compiled_function body of `_const_str.format` with
-    # self=pyobj, which still calls the hipy-internal
-    # `self._const_str__get_format_parts()` — that name isn't on the pyobj and
-    # typeshed lookup fails. See bugs-with-increased-cov.md #4.
+    # hipy/lib/builtins.py:1064 raises NotImplementedError from the helper
+    # __get_format_parts. Because that helper is marked helper=True, the
+    # exception bubbles up past format() so the caller-level fallback picks
+    # it up and runs str.format on the real pyobj.
     print("{:n}".format(not_constant(1234567)))
 
 
-@pytest.mark.xfail(reason="str.format fallback is broken — see bugs-with-increased-cov.md #4")
 def test_format_locale_n_falls_back():
     # Under the default "C" locale CPython renders %n without separators.
     check_prints(fn_format_locale_n_falls_back, """
@@ -58,12 +54,11 @@ def test_format_locale_n_falls_back():
 
 @hipy.compiled_function
 def fn_format_sign_aware_align_falls_back():
-    # "{:=8d}" — sign-aware '=' alignment. Same @compiled_function fallback
-    # issue as above.
+    # "{:=8d}" — sign-aware '=' alignment. Same helper-method fallback path
+    # as above.
     print("|{:=8d}|".format(not_constant(-42)))
 
 
-@pytest.mark.xfail(reason="str.format fallback is broken — see bugs-with-increased-cov.md #4")
 def test_format_sign_aware_align_falls_back():
     check_prints(fn_format_sign_aware_align_falls_back, """
 |-     42|

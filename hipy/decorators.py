@@ -1,22 +1,34 @@
 import inspect
 
 
-def compiled_function(func):
+def compiled_function(func=None, *, helper=False):
     from hipy.function import HLCFunction
-    return HLCFunction(func)
+    if func is None:
+        # Called as @hipy.compiled_function(helper=True) — return a real decorator.
+        def decorate(fn):
+            return HLCFunction(fn, helper=helper)
+        return decorate
+    # Called as @hipy.compiled_function (bare).
+    return HLCFunction(func, helper=helper)
 
 
-def raw(fn):
+def raw(fn=None, *, helper=False):
     from hipy.function import HLCFunction
-    if "_context" not in inspect.signature(fn).parameters:
-        def with_context(*args, **kwargs):
-            if "_context" in kwargs:
-                del kwargs["_context"]
-            return fn(*args, **kwargs)
 
-        return HLCFunction(fn, with_context)
+    def _wrap(f):
+        if "_context" not in inspect.signature(f).parameters:
+            def with_context(*args, **kwargs):
+                if "_context" in kwargs:
+                    del kwargs["_context"]
+                return f(*args, **kwargs)
 
-    return HLCFunction(fn, fn)
+            return HLCFunction(f, with_context, helper=helper)
+
+        return HLCFunction(f, f, helper=helper)
+
+    if fn is None:
+        return _wrap
+    return _wrap(fn)
 
 
 def classdef(cls):

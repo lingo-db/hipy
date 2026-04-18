@@ -68,38 +68,26 @@ that no longer accepts it under pandas 3.x.
 
 ---
 
-## 4. `str.format(...)` fallback breaks on pyobj-method lookup
+## 4. `str.format(...)` fallback breaks on pyobj-method lookup — **FIXED**
 
-**Location:** `hipy/lib/builtins.py:1372-1380` — `_const_str.format` is a
+**Was:** `hipy/lib/builtins.py` — `_const_str.format` is a
 `@hipy.compiled_function` whose body calls the hipy-internal raw method
-`self._const_str__get_format_parts()` (name-mangled from
-`__get_format_parts`). When the inner parser raises
-`NotImplementedError` (e.g. for `"{:n}"` or `"{:=8d}"`), the ambient
-fallback converts the receiver to `pyobj` and re-runs the method call.
-The retry still goes through `self._const_str__get_format_parts()` — now
-on a `pyobj`, which has no such attribute — and the `object.__call__`
-machinery ends up doing a typeshed lookup for
-`builtins.str.__get_format_parts`, which doesn't exist:
+`self._const_str__get_format_parts()`. When the inner parser raised
+`NotImplementedError` (e.g. for `"{:n}"` or `"{:=8d}"`), the method-call
+fallback kicked in *at the helper call site* and tried to resolve
+`__get_format_parts` on a pyobj str — which doesn't exist — via a
+typeshed lookup that raised `KeyError: '__get_format_parts'`.
 
-    KeyError: '__get_format_parts'
-    # (or ModuleNotFoundError: typeshed_client, if not installed)
+**Fix:** `@hipy.raw` / `@hipy.compiled_function` now accept
+`helper=True`. Functions marked helper skip the automatic pyobj
+fallback entirely — their exceptions propagate to the caller, whose own
+fallback is the one that should handle them. `__get_format_parts` and
+`__get_percentage_format_parts` are marked helper; the exception now
+bubbles up past `format()` and the outer fallback re-runs the call
+against the real pyobj `str.format`.
 
-**Contrast with `str.__mod__`:** `"%X" % arg` works because `%` is a
-binary operator — `perform_binop` falls back through
-`python.operator.mod`, a direct pyobj builtin that doesn't need typeshed.
-Only method-call fallback is affected.
-
-**Reproducer:** `test/test_fallback_coverage.py::test_format_locale_n_falls_back`
-and `::test_format_sign_aware_align_falls_back` (both xfail).
-
-    "{:n}".format(42)      # fallback-path KeyError
-    "{:=8d}".format(-42)   # fallback-path KeyError
-
-**Fix sketch:** have `_const_str.format` fast-path to pyobj
-(`intrinsics.to_python(self).format(*args)` with direct `str.format`
-dispatch) when `_const_str__get_format_parts` would raise — or make
-`format`/`__mod__` `@raw` methods that handle the NotImplementedError
-themselves and invoke a dedicated pyobj builtin `python.operator.format`.
+**Regression tests:** `test/test_fallback_coverage.py::test_format_locale_n_falls_back`
+and `::test_format_sign_aware_align_falls_back`.
 
 ---
 

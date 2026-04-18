@@ -1105,7 +1105,7 @@ class _const_str(CValue, str):
 
         return out
 
-    @hipy.raw
+    @hipy.raw(helper=True)
     def __get_format_parts(self, _context):
         import re
 
@@ -1173,7 +1173,7 @@ class _const_str(CValue, str):
         return _context.create_tuple([_context.create_list([_context.constant(s) for s in literals]),
                                       _context.create_list([_context.constant(s) for s in cpp_specs])])
 
-    @hipy.raw
+    @hipy.raw(helper=True)
     def __get_percentage_format_parts(self, _context):
         from typing import List, Tuple
 

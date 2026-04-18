@@ -192,6 +192,16 @@ class Context:
             fn = self.unwrap(fn)
             assert all([isinstance(arg, ValueHolder) for arg in args])
             # args = [self.wrap(arg) for arg in args]
+            # Helper functions/methods never fall back to pyobj — they are
+            # private implementation details (e.g. parsing helpers) that don't
+            # exist on the Python side. Let their exceptions propagate to the
+            # caller so the caller's own fallback handles it.
+            is_helper = False
+            match fn:
+                case HLCFunctionValue(fn=helper_fn) if getattr(helper_fn, "helper", False):
+                    is_helper = True
+                case HLCMethodValue(fn=HLCMethod(func=helper_fn)) if getattr(helper_fn, "helper", False):
+                    is_helper = True
             try:
                 match fn:
                     case type():
@@ -210,7 +220,7 @@ class Context:
                             res = func.get_compiled_fn()(self_value, *args, **kwargs, _context=self)
                             self.track_using(res)
                         except NotImplementedError as e:
-                            if self.fallback():
+                            if self.fallback() and not is_helper:
                                 res = self.perform_call(self.to_python(original_fn), args)
                                 self.track_using(res)
                             else:
@@ -228,7 +238,7 @@ class Context:
                     case _:
                         raise NotImplementedError()
             except (AttributeError,TypeError, NotImplementedError) as e:
-                if self.fallback() and not isinstance(fn, lib.builtins.object):
+                if self.fallback() and not is_helper and not isinstance(fn, lib.builtins.object):
                     #print("falling back to python", fn, e, e.args, file=sys.stderr)
                     return self.perform_call(self.to_python(original_fn), args)
                 else:
