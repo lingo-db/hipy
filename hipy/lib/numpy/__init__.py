@@ -280,6 +280,10 @@ class float64(Value):
         return self._float_op("mod", other, reverse=True)
 
     @hipy.compiled_function
+    def __neg__(self):
+        return intrinsics.call_builtin("scalar.float.neg", float64, [self])
+
+    @hipy.compiled_function
     def __pow__(self, other):
         if intrinsics.isa(other, _const_int) or intrinsics.isa(other, _const_int64):
             if int(other) < 5:

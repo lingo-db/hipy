@@ -80,7 +80,6 @@ def fn_q2():
         print(v)
 
 
-@pytest.mark.xfail(reason="numpy float64 scalar has no __neg__; -price inside the loop fails")
 def test_q2():
     check_prints(fn_q2, """
 0.5
