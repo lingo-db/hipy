@@ -1,7 +1,6 @@
 __HIPY_MODULE__ = "pandas"
 
 import json
-import builtins
 from typing import List, Dict
 
 import numpy as np
@@ -11,6 +10,7 @@ import sys
 import hipy
 from hipy import intrinsics, ir
 from hipy.lib._tabular import column, table
+import hipy.lib.builtins as builtins
 from hipy.lib.builtins import _concrete_dict, _const_str, _concrete_list
 from hipy.value import SimpleType, Value, Type, raw_module, ValueHolder, TypeValue, CValue, VoidValue, static_object
 import hipy.lib.numpy

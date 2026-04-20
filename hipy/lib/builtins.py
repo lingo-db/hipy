@@ -1,5 +1,6 @@
 import ast
 import inspect
+import sys
 from typing import List, Tuple, Dict, Any
 
 from builtins import *
@@ -11,6 +12,8 @@ import hipy.ir as ir
 import hipy.intrinsics as intrinsics
 
 __HIPY_MODULE__ = "builtins"
+
+hipy.register(sys.modules[__name__])
 
 
 @hipy.classdef
