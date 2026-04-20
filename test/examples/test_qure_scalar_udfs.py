@@ -294,9 +294,12 @@ def fn_q9():
         print(v)
 
 
-@pytest.mark.xfail(reason="pandas shim lacks Series.abs / unary minus on Series")
 def test_q9():
-    check_prints(fn_q9, "")
+    # |10-3| + |5-1| = 11,  |20-4| + |15-2| = 29
+    check_prints(fn_q9, """
+11
+29
+""")
 
 
 # ---------------------------------------------------------------------------

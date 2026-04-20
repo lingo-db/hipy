@@ -1,6 +1,7 @@
 __HIPY_MODULE__ = "pandas"
 
 import json
+import builtins
 from typing import List, Dict
 
 import numpy as np
@@ -1076,6 +1077,14 @@ class Series(Value):
     def apply(self, fn):
         res_col = self._data.apply(lambda x: _to_native_type(fn(_to_python_type(x))))
         return Series._create_raw(res_col, self.index)
+
+    @hipy.compiled_function
+    def __neg__(self):
+        return self.apply(lambda x: -x)
+
+    @hipy.compiled_function
+    def abs(self):
+        return self.apply(lambda x: builtins.abs(x))
 
     @hipy.compiled_function
     def __iter__(self):
