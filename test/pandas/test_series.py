@@ -52,6 +52,25 @@ dtype: str
 
 
 @hipy.compiled_function
+def fn_apply_float_series():
+    # _to_python_type in pandas/__init__.py previously had a typo where
+    # the np.float64 branch was guarded by np.int64, making it
+    # unreachable. Apply on a float Series rounds back through that
+    # unwrap/rewrap path.
+    s = pd.Series([1.5, 2.5, 3.5])
+    print(s.apply(lambda x: x + 0.0))
+
+
+def test_apply_float_series():
+    check_prints(fn_apply_float_series, """
+0    1.5
+1    2.5
+2    3.5
+dtype: float64
+""")
+
+
+@hipy.compiled_function
 def fn_bool_ops():
     s1 = pd.Series([True, False, True, False])
     s2 = pd.Series([True, True, False, False])

@@ -48,7 +48,7 @@ def _to_native_type(x):
 def _to_python_type(x):
     if intrinsics.isa(x, np.int64):
         return int(x)
-    elif intrinsics.isa(x, np.int64):
+    elif intrinsics.isa(x, np.float64):
         return float(x)
     else:
         return x
