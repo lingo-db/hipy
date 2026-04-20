@@ -804,13 +804,15 @@ def stage_stmt(stmt, context: StageContext):
             createTarget(target).assign(stage_expr(value, context), context)
         case ast.AugAssign(target=target, op=op, value=value, lineno=lineno, col_offset=col_offset):
 
-            createTarget(target).augassign(lambda x: stage_context_call("perform_call", {
-                "fn": stage_context_call("get_attr", {
-                    "val": x,
-                    "attr": ast.Constant(value=get_aug_method(op), lineno=lineno, col_offset=col_offset),
-                }, lineno, col_offset, context),
-                "args": ast.List(elts=[stage_expr(value, context)], ctx=ast.Load(), lineno=lineno,
-                                 col_offset=col_offset),
+            left_method, right_method = get_binop_methods(op)
+            aug_method = get_aug_method(op)
+            staged_value = stage_expr(value, context)
+            createTarget(target).augassign(lambda x: stage_context_call("perform_augop", {
+                "arg": x,
+                "rhs": staged_value,
+                "left_method": ast.Constant(value=left_method, lineno=lineno, col_offset=col_offset),
+                "right_method": ast.Constant(value=right_method, lineno=lineno, col_offset=col_offset),
+                "aug_method": ast.Constant(value=aug_method, lineno=lineno, col_offset=col_offset),
             }, lineno, col_offset, context), context)
 
         case ast.If(test=test, body=body, orelse=orelse, lineno=lineno, col_offset=col_offset):

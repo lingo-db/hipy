@@ -285,6 +285,17 @@ class Context:
                     #print("fallback to python disabled", left_method, e, e.args, file=sys.stderr)
                     raise e
 
+    def perform_augop(self, arg, rhs, left_method, right_method, aug_method, _action_id=None):
+        # Python semantics for `x <op>= y`: try `x.__i<op>__(y)`; if it
+        # returns NotImplemented (or the method is absent) fall back to
+        # `x = x <op> y`. The rewriter emits this for every AugAssign.
+        with self.handle_action(_action_id):
+            try:
+                with self.no_fallback():
+                    return self.perform_call(self.get_attr(arg, aug_method), [rhs])
+            except (NotImplementedError, TypeError, AttributeError):
+                return self.perform_binop(arg, rhs, left_method, right_method)
+
     def import_pymodule(self, name, _action_id=None):
         if name.startswith("hipy.") or name == "hipy":
             raise NotImplementedError()
