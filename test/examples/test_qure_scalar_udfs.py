@@ -655,6 +655,12 @@ def fn_q19():
         print(v)
 
 
-@pytest.mark.xfail(reason="pandas shim lacks Series.mean / Series.std")
 def test_q19():
-    check_prints(fn_q19, "")
+    # mean=2.5, std(ddof=1)=sqrt((1.5²+0.5²+0.5²+1.5²)/3)=sqrt(5/3)≈1.290994
+    # normalized: (-1.5, -0.5, 0.5, 1.5) / 1.290994 ≈ (-1.161895, -0.387298, 0.387298, 1.161895)
+    check_prints(fn_q19, """
+-1.161895
+-0.387298
+0.387298
+1.161895
+""")

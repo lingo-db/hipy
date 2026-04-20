@@ -1,6 +1,7 @@
 __HIPY_MODULE__ = "pandas"
 
 import json
+import math
 from typing import List, Dict
 
 import numpy as np
@@ -11,6 +12,7 @@ import hipy
 from hipy import intrinsics, ir
 from hipy.lib._tabular import column, table
 import hipy.lib.builtins as builtins
+import hipy.lib.math
 from hipy.lib.builtins import _concrete_dict, _const_str, _concrete_list
 from hipy.value import SimpleType, Value, Type, raw_module, ValueHolder, TypeValue, CValue, VoidValue, static_object
 import hipy.lib.numpy
@@ -1086,6 +1088,7 @@ class Series(Value):
     def abs(self):
         return self.apply(lambda x: builtins.abs(x))
 
+
     @hipy.compiled_function
     def __iter__(self):
         return self._data.__iter__()
@@ -1177,6 +1180,21 @@ class Series(Value):
                 return np.int64(0)
             else:
                 return 0
+
+    @hipy.compiled_function
+    def mean(self):
+        # Arithmetic mean, skipping NaN is not yet modelled separately.
+        return float(self.sum()) / float(len(self))
+
+    @hipy.compiled_function
+    def std(self, ddof=1):
+        # Sample standard deviation. `ddof=1` matches pandas' default
+        # (Bessel-corrected); pass ddof=0 for the population std.
+        m = self.mean()
+        # Sum of squared deviations via Series.apply + Series.sum, so
+        # the accumulator stays in a native float column.
+        sq_sum = float(self.apply(lambda x: (float(x) - m) ** 2.0).sum())
+        return math.sqrt(sq_sum / float(len(self) - ddof))
     @hipy.compiled_function
     def fillna(self, value):
         if intrinsics.isa(value, self._element_type):
