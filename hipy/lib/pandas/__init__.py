@@ -145,6 +145,14 @@ class Index(Value):
         else:
             return const_lookup
 
+    @hipy.compiled_function
+    def __iter__(self):
+        return self._column.__iter__()
+
+    @hipy.compiled_function
+    def __len__(self):
+        return len(self._column)
+
 @hipy.classdef
 class MultiIndex(Value):
     __HIPY_MUTABLE__ = False
@@ -254,6 +262,14 @@ class RangeIndex(Value):
     @hipy.compiled_function
     def _lookup(self, key):
         return key - self.start
+
+    @hipy.compiled_function
+    def __iter__(self):
+        return range(self.start, self.stop, self.step).__iter__()
+
+    @hipy.compiled_function
+    def __len__(self):
+        return len(self._column)
 
 
 @hipy.classdef
@@ -569,6 +585,15 @@ class DataFrame(Value):
         index_cols=self.index._columns()
         table_cols=self._table._column_types
         return [col for col in table_cols if col not in index_cols]
+
+    @hipy.raw
+    def __constiter__(self, _context):
+        cols = _context.perform_call(_context.get_attr(self, "_columns"), [])
+        return _context.perform_call(_context.get_attr(cols, "__constiter__"), [])
+
+    @hipy.compiled_function
+    def __len__(self):
+        return len(self._table)
 
     @hipy.compiled_function
     def sort_values(self, by, ascending=True, axis=0):
@@ -1046,6 +1071,14 @@ class Series(Value):
     def apply(self, fn):
         res_col = self._data.apply(lambda x: _to_native_type(fn(_to_python_type(x))))
         return Series._create_raw(res_col, self.index)
+
+    @hipy.compiled_function
+    def __iter__(self):
+        return self._data.__iter__()
+
+    @hipy.compiled_function
+    def __len__(self):
+        return len(self._data)
 
     @hipy.compiled_function
     def __hipy__repr__(self):

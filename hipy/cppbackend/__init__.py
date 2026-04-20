@@ -720,6 +720,13 @@ class CPPBackend:
         {self.generate_value(op.result)}={self.generate_value(op.args[2])}({self.generate_value(op.result)},iter_val);
     }});
                  """
+            case "column.iter":
+                return f"""
+    {self.generate_result(op.result)} = {self.generate_value(op.args[2])};
+    {self.generate_value(op.args[3])}->iterate<{get_column_accessor(op.args[3].type.element_type)}>([&](auto iter_val){{
+        {self.generate_value(op.result)} = {self.generate_value(op.args[0])}({self.generate_value(op.args[1])},{self.generate_value(op.result)}, iter_val);
+    }});
+                """
             case "column.unique":
                 return f"{self.generate_result(op.result)} = {self.generate_value(op.args[0])}->unique();"
             case "column.isin_column":

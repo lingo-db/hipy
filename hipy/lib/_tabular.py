@@ -371,3 +371,56 @@ class column(Value):
     @hipy.compiled_function
     def get_by_index(self,pos):
         return intrinsics.call_builtin("column.value_by_index",  self._element_type, [self,pos])
+
+    @hipy.classdef
+    class _iterator(Value):
+        def __init__(self, col_val, value=None):
+            super().__init__(value)
+            self._col_val = col_val
+
+        def __track__(self, iter_value, context):
+            context.track_nested(iter_value, self._col_val)
+
+        @hipy.compiled_function
+        def __itertype__(self):
+            return self._col_val._element_type
+
+        @hipy.compiled_function
+        def __iterate__(self, loopfn, x, iter_vals):
+            return intrinsics.call_builtin("column.iter", intrinsics.typeof(iter_vals),
+                                           [loopfn, x, iter_vals, self._col_val])
+
+        @hipy.compiled_function
+        def __topython__(self):
+            return intrinsics.to_python(self._col_val).__iter__()
+
+        def __abstract__(self, context):
+            self._col_val = self._col_val.as_abstract(context)
+            return column._iterator(self._col_val, self._col_val.value.__value__)
+
+        class T(Type):
+            def __init__(self, col_type):
+                self.col_type = col_type
+
+            def ir_type(self):
+                return self.col_type.ir_type()
+
+            def construct(self, value, context):
+                return column._iterator(self.col_type.construct(value, context), value)
+
+            def __eq__(self, other):
+                if isinstance(other, column._iterator.T):
+                    return self.col_type == other.col_type
+                else:
+                    return False
+
+        @staticmethod
+        def __hipy_create_type__(*args) -> Type:
+            return column._iterator.T(args[0])
+
+        def __hipy_get_type__(self) -> Type:
+            return column._iterator.T(self._col_val.__hipy_get_type__())
+
+    @hipy.raw
+    def __iter__(self, _context):
+        return _context.wrap(column._iterator(self.as_abstract(_context)))

@@ -155,6 +155,10 @@ table-oriented library.
   be const) → `ir.RecordGet`.
 - **`column`** — `ir.ColumnType(scalar_type)`. Stores `_element_type`.
   `sequential(num_rows)` static method emits a sequential integer column.
+  Iterable via a nested `column._iterator` class and `__iter__`; iteration
+  emits a `column.iter` builtin whose C++ handler uses the column's
+  `iterate<Accessor>` hook. This is what `Series.__iter__` and
+  `Index.__iter__` delegate to.
 - **`table`** — `ir.TableType(columns_list)`. Immutable
   (`__HIPY_MUTABLE__=False`). Operations all return *new* tables with updated
   schemas:
@@ -301,7 +305,10 @@ compile-time side as long as possible.
 Key methods: `__getitem__(colname)` returns a Series; `__setitem__(colname,
 val)` bumps the version, calls `_table.set_column`. `merge`, `fillna`,
 `reset_index`, `apply(func, axis=0/1)`, `groupby(by)`. `axis=1` applies use
-an internal `_row_to_series` adapter.
+an internal `_row_to_series` adapter. `__iter__` / `__constiter__` yield
+column names (matching pandas semantics) — names are compile-time
+constants so `__constiter__` unrolls the loop at generation time.
+`__len__` returns the underlying table length.
 
 ### 5.3 `Series`
 
@@ -315,6 +322,9 @@ Mutable. Holds `_data` (column), `index`, optional `_df` (parent), `name`,
   only on first access.
 - `.str` / `.dt` return `_StringMethods` / `_DateMethods` accessor objects
   (chainable).
+- `__iter__` delegates to the underlying column's iterator; `__len__`
+  delegates to the column's length. `for v in series` yields each element
+  at the column's element type (e.g. `np.int64`, `np.float64`, `str`).
 
 ### 5.4 GroupBy
 
@@ -379,7 +389,8 @@ new backend (these are what you'll be handling in the IR):
 - **Collections:** `list.<append|at|set|len|pop|extend|iter>`,
   `dict.<get|set|contains|iter_keys|iter_items|iter_values|create>`,
   `set.<add|contains|len|iter>`.
-- **Iteration:** `range.iter`, `list.iter`, `dict.iter_keys`, `string.iter`.
+- **Iteration:** `range.iter`, `list.iter`, `dict.iter_keys`, `string.iter`,
+  `column.iter`.
 - **Tables:** `table.get_column`, `table.set_column`, `table.select`,
   `table.filter`, `table.sort`, `table.slice`, `table.apply_row_wise_scalar`,
   `table.aggregate`, `table.join_inner`, `table.join_left`.
