@@ -1084,7 +1084,9 @@ class Series(Value):
         return self.apply(lambda x: ~x)
 
     @hipy.compiled_function
-    def apply(self, fn):
+    def apply(self, fn, axis=0):
+        # pandas' Series.apply ignores `axis`; accept it for parity with
+        # UDFs that were copy-pasted from DataFrame.apply call sites.
         res_col = self._data.apply(lambda x: _to_native_type(fn(_to_python_type(x))))
         return Series._create_raw(res_col, self.index)
 
@@ -1199,6 +1201,18 @@ class Series(Value):
     def mean(self):
         # Arithmetic mean, skipping NaN is not yet modelled separately.
         return float(self.sum()) / float(len(self))
+
+    @hipy.compiled_function
+    def quantile(self, q):
+        # Linear interpolation, matching pandas' default.
+        values = sorted([float(v) for v in self])
+        n = len(values)
+        pos = q * float(n - 1)
+        lo = int(pos)
+        if lo >= n - 1:
+            return values[n - 1]
+        frac = pos - float(lo)
+        return values[lo] + frac * (values[lo + 1] - values[lo])
 
     @hipy.compiled_function
     def std(self, ddof=1):

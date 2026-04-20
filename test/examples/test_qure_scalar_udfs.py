@@ -116,9 +116,13 @@ def fn_q3():
         print(v)
 
 
-@pytest.mark.xfail(reason="pandas shim lacks Series.quantile and apply(axis=1)")
 def test_q3():
-    check_prints(fn_q3, "")
+    check_prints(fn_q3, """
+False
+False
+False
+True
+""")
 
 
 # ---------------------------------------------------------------------------
@@ -391,7 +395,7 @@ def fn_q11():
         print(v)
 
 
-@pytest.mark.xfail(reason="Needs np.empty/logical_or/logical_and/logical_not/minimum/power + boolean-mask indexing")
+@pytest.mark.xfail(reason="Needs np.empty + boolean-mask ndarray indexing/assignment and a sys.float_info shim")
 def test_q11():
     check_prints(fn_q11, "")
 
@@ -538,9 +542,10 @@ def fn_q15():
     print(udf_q15(row))
 
 
-@pytest.mark.xfail(reason="HiPy doesn't support heterogeneous dict-indexed row records the way Spark does")
 def test_q15():
-    check_prints(fn_q15, "")
+    check_prints(fn_q15, """
+100.72755
+""")
 
 
 # ---------------------------------------------------------------------------

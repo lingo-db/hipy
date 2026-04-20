@@ -457,6 +457,29 @@ def power(a, b):
 
 
 @hipy.compiled_function
+def logical_and(a, b):
+    # https://numpy.org/doc/stable/reference/generated/numpy.logical_and.html
+    return _binary_function(a, b, lambda x, y: x and y)
+
+
+@hipy.compiled_function
+def logical_or(a, b):
+    # https://numpy.org/doc/stable/reference/generated/numpy.logical_or.html
+    return _binary_function(a, b, lambda x, y: x or y)
+
+
+@hipy.compiled_function
+def logical_not(x):
+    # https://numpy.org/doc/stable/reference/generated/numpy.logical_not.html
+    if intrinsics.isa(x, ndarray):
+        return _array_apply_scalar(x, lambda v: not v)
+    elif intrinsics.isa(x, hipy.lib.pandas.Series):
+        return x.apply(lambda v: not v)
+    else:
+        return not x
+
+
+@hipy.compiled_function
 def sin(x):
     return _float_function("sin", x)
 
