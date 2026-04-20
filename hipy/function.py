@@ -37,6 +37,7 @@ class HLCMethod:
 class GeneratorFunction:
     def __init__(self, pyfunc):
         self.pyfunc = pyfunc
+        self.compiled_fn = None
 
     def get_compiled_fn(self):
         from hipy.compiler import stage_and_compile
