@@ -177,9 +177,11 @@ def fn_q5():
         print(v)
 
 
-@pytest.mark.xfail(reason="HiPy doesn't support the built-in zip()")
 def test_q5():
-    check_prints(fn_q5, "")
+    check_prints(fn_q5, """
+Mode: AIR, Extended Price: $100.0, Discount Rate: 8.0%, Tax Amount: $8.0, Total Price: $ 108.0
+Invalid Price
+""")
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +208,7 @@ def fn_q6():
         print(v)
 
 
-@pytest.mark.xfail(reason="Nested function calling `val not in mp` through a list-comp lambda trips HiPy's bool_not path")
+@pytest.mark.xfail(reason="Nested function `get_idx` is captured as a read-only input of the list-comp loop, and HLCFunctionValue has no ir_type")
 def test_q6():
     check_prints(fn_q6, """
 1
@@ -596,9 +598,12 @@ def fn_q17():
         print(v)
 
 
-@pytest.mark.xfail(reason="HiPy doesn't support the built-in zip()")
 def test_q17():
-    check_prints(fn_q17, "")
+    # The UDF builds an f-string without the `f` prefix, so the braces
+    # survive literally — matching the original Spark UDF's behaviour.
+    check_prints(fn_q17, """
+Original Price: {price}, Final Price: {final_price}, Discount Level: {discount_level}
+""")
 
 
 # ---------------------------------------------------------------------------

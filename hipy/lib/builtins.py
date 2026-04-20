@@ -2138,8 +2138,8 @@ class _concrete_dict(dict):
             case ValueHolder(value=CValue(cval=item)):
                 return _context.constant(item in self.value.c_dict)
             case _:
-                _context.perform_call(_context.get_attr(self.as_abstract(_context), "__contains__"),
-                                      [item])
+                return _context.perform_call(_context.get_attr(self.as_abstract(_context), "__contains__"),
+                                             [item])
 
     def __hipy_get_type__(self):
         self.update_types()
@@ -2512,6 +2512,32 @@ def sum(l):
     for i in l:
         r += i
     return r
+
+
+@hipy.compiled_function
+def zip(*args):
+    # Return a list of tuples whose i-th element is
+    # (args[0][i], args[1][i], ...). We support 2- and 3-arg forms
+    # explicitly since HiPy's tuple is a fixed-arity record and can't be
+    # constructed from a variable-length list.
+    if len(args) == 2:
+        a = list(args[0])
+        b = list(args[1])
+        n = min(len(a), len(b))
+        result = []
+        for i in range(n):
+            result.append((a[i], b[i]))
+        return result
+    if len(args) == 3:
+        a = list(args[0])
+        b = list(args[1])
+        c = list(args[2])
+        n = min(len(a), len(b), len(c))
+        result = []
+        for i in range(n):
+            result.append((a[i], b[i], c[i]))
+        return result
+    intrinsics.not_implemented()
 
 
 @hipy.compiled_function
