@@ -24,7 +24,7 @@ class Match(static_object["string", "_groups","_numGroups", "_re","_method", "_f
         return hipy.value.ValueHolder(Match(string, groups, numGroups, re_obj, method, flags),_context)
     @hipy.compiled_function
     def __topython__(self):
-        return  getattr(intrinsics.import_pymodule("__main__").re, self._method)(self._re,self.string,self._flags)
+        return original.search(self._re, self.string, self._flags)
 
     @hipy.compiled_function
     def __str__(self):
@@ -57,18 +57,18 @@ def _is_simple_regex(pattern, _context):
             while i < len(const_pattern):
                 if const_pattern[i] == '\\' and i + 1 < len(const_pattern):
                     if const_pattern[i:i+2] not in escape_sequences:
-                        return False
+                        return _context.constant(False, 0)
                     i += 2
                 elif const_pattern[i] in simple_chars:
                     i += 1
                 else:
-                    return False
+                    return _context.constant(False, 0)
 
             # Check for unsupported features
             unsupported = ["|", "(?", "(?:", "(?=", "(?!", "(?<=", "(?<!"]
             for feature in unsupported:
                 if feature in const_pattern:
-                    return False
+                    return _context.constant(False, 0)
 
             return _context.constant(True, 0)
         case _:

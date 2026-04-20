@@ -155,7 +155,7 @@ mapping, grouped by prefix:
   hand-rolled `JoinHashTable` / `AggregationHT` in `datastructures.h`).
 - **`column.<apply_scalar|binary_op|filter|aggregate|unique|isin_column|sequential|length>`** →
   chunk-wise Arrow compute + custom column-builder emission.
-- **`python.operator.<add|sub|…|eq|lt|gt|contains>`** → pybind11 operator
+- **`python.operator.<add|sub|…|eq|lt|gt|contains|is_>`** → pybind11 operator
   overloads on `py::object`.
 - **`python.<create_list|create_dict|create_slice|get_none|tuple_from_list>`** →
   pybind11 constructors.

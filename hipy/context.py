@@ -438,16 +438,17 @@ class Context:
             match left.value, right.value:
                 case (VoidValue(), VoidValue()):
                     return self.constant(True)
-                case (VoidValue(), lib.builtins.object()):
-                    raise NotImplementedError()
-                case (lib.builtins.object(), VoidValue()):
+                case (VoidValue(), lib.builtins.object()) | (lib.builtins.object(), VoidValue()) | (lib.builtins.object(), lib.builtins.object()):
+                    if self.fallback():
+                        return self.wrap(
+                            self.call_builtin("python.operator.is_",
+                                              lib.builtins.bool.__hipy_create_type__(),
+                                              [self.to_python(left), self.to_python(right)]))
                     raise NotImplementedError()
                 case (_, VoidValue()):
                     return self.constant(False)
                 case (VoidValue(), _):
                     return self.constant(False)
-                case (lib.builtins.object(), lib.builtins.object()):
-                    raise NotImplementedError()
         raise NotImplementedError()
 
     def in_(self,left, right, _action_id=None):

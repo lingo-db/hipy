@@ -561,6 +561,8 @@ class CPPBackend:
                 return binary_op(lambda x, y: f"py::reinterpret_steal<py::object>(PyNumber_Power(({x}).ptr(),({y}).ptr(),Py_None))")
             case "python.operator.contains":
                 return binary_op(lambda x, y: f"{x}.contains({y})")
+            case "python.operator.is_":
+                return binary_op(lambda x, y: f"{x}.is({y})")
             case "dict.create":
                 return f"{self.generate_result(op.result)} = std::make_shared<std::unordered_map<{self.generate_type(op.result.type.key_type)},{self.generate_type(op.result.type.val_type)}>>();"
             case "dict.set":
