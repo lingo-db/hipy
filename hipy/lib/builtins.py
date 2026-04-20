@@ -383,6 +383,18 @@ class int(Value):
         return self._int_op("and", other)
 
     @hipy.compiled_function
+    def __or__(self, other):
+        return self._int_op("or", other)
+
+    @hipy.compiled_function
+    def __xor__(self, other):
+        return self._int_op("xor", other)
+
+    @hipy.compiled_function
+    def __rshift__(self, other):
+        return self._int_op("rshift", other)
+
+    @hipy.compiled_function
     def __eq__(self, other):
         return self._cmp_op("eq", other)
 

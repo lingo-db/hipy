@@ -180,6 +180,26 @@ def test_int_bitwise_abstract():
 
 
 @hipy.compiled_function
+def fn_int_bitwise_or_xor_rshift():
+    # int.__or__, __xor__, __rshift__ — previously missing; the scalar.int.<op>
+    # builtins already existed in the C++ backend, only the Python dunder
+    # dispatchers were absent.
+    a = not_constant(0b1100)
+    b = not_constant(0b1010)
+    print(a | b)
+    print(a ^ b)
+    print(not_constant(20) >> not_constant(2))
+
+
+def test_int_bitwise_or_xor_rshift():
+    check_prints(fn_int_bitwise_or_xor_rshift, """
+14
+6
+5
+""")
+
+
+@hipy.compiled_function
 def fn_int_cast_from_bool():
     # int(<bool>) should dispatch through int._cast_to_int → bool.__int__ (1/0).
     print(int(not_constant(True)))
