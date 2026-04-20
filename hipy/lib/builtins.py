@@ -108,7 +108,7 @@ class object(Value):
             resolved = resolver.get_fully_qualified_name(classname)
             if not resolved:
                 return None
-            child = resolved.child_nodes[membername]
+            child = resolved.child_nodes.get(membername)
             if not child:
                 return None
             child_ast = child.ast
