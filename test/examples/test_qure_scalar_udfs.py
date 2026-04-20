@@ -208,7 +208,6 @@ def fn_q6():
         print(v)
 
 
-@pytest.mark.xfail(reason="Nested function `get_idx` is captured as a read-only input of the list-comp loop, and HLCFunctionValue has no ir_type")
 def test_q6():
     check_prints(fn_q6, """
 1

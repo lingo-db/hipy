@@ -1075,8 +1075,23 @@ class Context:
             def record_type(vals):
                 return ir.RecordType(
                     [(f"val{i}", val.value.__hipy_get_type__().ir_type()) for i, val in enumerate(vals)])
-                        # for x, y in zip(iter_vals, iter_vals_args):
-            read_only_input_ir_types = record_type(read_only_inputs)
+
+            # Some read-only inputs are purely compile-time values
+            # (nested HLCFunctions, modules, …). They have no IR type,
+            # so we can't smuggle them through a record — instead we
+            # propagate the outer ValueHolder directly into the loop
+            # body's staged closure.
+            def _has_ir_type(val):
+                try:
+                    val.value.__hipy_get_type__().ir_type()
+                except (NotImplementedError, AttributeError):
+                    return False
+                return True
+
+            ir_read_only_inputs = [v for v in read_only_inputs if _has_ir_type(v)]
+            # Indices of inputs that are threaded through the IR record
+            # (same order as read_only_inputs).
+            read_only_input_ir_types = record_type(ir_read_only_inputs)
             iter_val_ir_types = record_type(iter_vals)
 
             func = ir.Function(self.module, f"loop_fn{self.loop_fn_counter}{hipy.config.function_suffix}",
@@ -1085,14 +1100,20 @@ class Context:
             self.loop_fn_counter += 1
 
             with self.use_block(func.body):
-                read_only_inputs_args = [
-                    ir.RecordGet(func.body, read_only_inputs[i].value.__hipy_get_type__().ir_type(),
+                ir_read_only_inputs_args = [
+                    ir.RecordGet(func.body, ir_read_only_inputs[i].value.__hipy_get_type__().ir_type(),
                                  func.args[0],
                                  f"val{i}").result for i in
-                    range(len(read_only_inputs))]
-                read_only_inputs_args = [
+                    range(len(ir_read_only_inputs))]
+                ir_read_only_inputs_args = [
                     self.wrap(o.value.__hipy_get_type__().construct(arg, self)) for
-                    o, arg in zip(read_only_inputs, read_only_inputs_args)]
+                    o, arg in zip(ir_read_only_inputs, ir_read_only_inputs_args)]
+                # Re-align to the original read_only_inputs order: where
+                # a slot skipped IR packing, pass the outer ValueHolder.
+                _ir_iter = iter(ir_read_only_inputs_args)
+                read_only_inputs_args = [
+                    next(_ir_iter) if _has_ir_type(v) else v for v in read_only_inputs
+                ]
                 iter_vals_args = [
                     ir.RecordGet(func.body, iter_vals[i].value.__hipy_get_type__().ir_type(), func.args[1],
                                  f"val{i}").result for i in
@@ -1113,9 +1134,9 @@ class Context:
                                     {f"val{i}": val.get_ir_value(self) for i, val in enumerate(res_vals)}).result
                 ir.Return(func.body, [res])
 
-            packed_read_only_inputs = ir.MakeRecord(self.block, record_type(read_only_inputs),
+            packed_read_only_inputs = ir.MakeRecord(self.block, record_type(ir_read_only_inputs),
                                                     {f"val{i}": val.get_ir_value(self) for i, val in
-                                                     enumerate(read_only_inputs)}).result
+                                                     enumerate(ir_read_only_inputs)}).result
             packed_iter_vals = ir.MakeRecord(self.block, record_type(iter_vals),
                                              {f"val{i}": val.get_ir_value(self) for i, val in enumerate(iter_vals)}).result
             func_ref = ir.FunctionRef(self.block, func).result
