@@ -223,6 +223,20 @@ def test_multiply():
 
 
 @hipy.compiled_function
+def fn_rmultiply():
+    # int * list — list.__rmul__ was previously missing, so Python's
+    # int.__mul__(list) not_implemented fallback raised
+    # AttributeError on __rmul__.
+    print(3 * not_constant([1, 2, 3]))
+
+
+def test_rmultiply():
+    check_prints(fn_rmultiply, """
+[1, 2, 3, 1, 2, 3, 1, 2, 3]
+""")
+
+
+@hipy.compiled_function
 def fn_list_setitem():
     # list.__setitem__ dispatches to list.set builtin.
     l = not_constant([1, 2, 3])

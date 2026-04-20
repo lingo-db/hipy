@@ -1535,6 +1535,10 @@ class list(Value):
             intrinsics.not_implemented()
 
     @hipy.compiled_function
+    def __rmul__(self, multiplier):
+        return self * multiplier
+
+    @hipy.compiled_function
     def __setitem__(self, key, value):
         if intrinsics.isa(key, int) and intrinsics.isa(value, self._element_type):
             intrinsics.call_builtin("list.set", None, [self, key, value])
