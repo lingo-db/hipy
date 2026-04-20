@@ -233,9 +233,12 @@ def fn_q7():
         print(v)
 
 
-@pytest.mark.xfail(reason="pandas shim lacks Series.map")
 def test_q7():
-    check_prints(fn_q7, "")
+    check_prints(fn_q7, """
+0-AIR
+1-MAIL
+2-RAIL
+""")
 
 
 # ---------------------------------------------------------------------------

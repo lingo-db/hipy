@@ -1088,6 +1088,12 @@ class Series(Value):
     def abs(self):
         return self.apply(lambda x: builtins.abs(x))
 
+    @hipy.compiled_function
+    def map(self, arg):
+        # Dict lookup form. Unmapped keys raise at runtime; pandas
+        # would substitute NaN here, but modelling that would require
+        # widening to a nullable dtype — left for a future extension.
+        return self.apply(lambda x: arg[x])
 
     @hipy.compiled_function
     def __iter__(self):
