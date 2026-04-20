@@ -774,6 +774,20 @@ class str(Value):
             intrinsics.not_implemented()
 
     @hipy.compiled_function
+    def __mul__(self, n):
+        if intrinsics.isa(n, int):
+            res = ""
+            for _ in range(n):
+                res = res + self
+            return res
+        else:
+            intrinsics.not_implemented()
+
+    @hipy.compiled_function
+    def __rmul__(self, n):
+        return self * n
+
+    @hipy.compiled_function
     def _cmp_op(self, op, other):
         if intrinsics.isa(other, str):
             return intrinsics.call_builtin("scalar.string.compare." + op, bool, [self, other])

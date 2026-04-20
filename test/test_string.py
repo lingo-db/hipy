@@ -478,3 +478,31 @@ b'bcd'
 b'abc'
 b'def'
 """)
+
+
+@hipy.compiled_function
+def fn_str_mul():
+    # str * int — previously missing, so `"ab" * 3` raised NotImplementedError.
+    s = not_constant("ab")
+    print(s * 3)
+    print("xy" * 4)
+
+
+def test_str_mul():
+    check_prints(fn_str_mul, """
+ababab
+xyxyxyxy
+""")
+
+
+@hipy.compiled_function
+def fn_str_rmul():
+    # int * str — str.__rmul__ was missing.
+    s = not_constant("ab")
+    print(3 * s)
+
+
+def test_str_rmul():
+    check_prints(fn_str_rmul, """
+ababab
+""")
