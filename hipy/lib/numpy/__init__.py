@@ -388,14 +388,23 @@ def _array_apply_scalar(array, fn):
 
 @hipy.compiled_function
 def _float_function(op, x):
-    x = _to_numpy(x)
     if intrinsics.isa(x, float64):
         return intrinsics.call_builtin("scalar.float."+op, float64, [x])
     elif intrinsics.isa(x, int64):
         z = float64(x)
         return _float_function(op, z)
+    elif intrinsics.isa(x, int):
+        z = float64(x)
+        return _float_function(op, z)
+    elif intrinsics.isa(x, float):
+        z = float64(x)
+        return _float_function(op, z)
     elif intrinsics.isa(x, ndarray):
         return _array_apply_scalar(x, lambda x: _float_function(op, x))
+    elif intrinsics.isa(x, hipy.lib.pandas.Series):
+        # Mirror numpy's ufunc-over-Series behaviour: apply the scalar
+        # op elementwise, preserving the Series' index.
+        return x.apply(lambda v: _float_function(op, v))
     else:
         intrinsics.not_implemented()
 @hipy.compiled_function
@@ -832,3 +841,9 @@ def isnan(x):
 
 
 import hipy.lib.numpy.random
+# pandas is imported last so that numpy's own definitions are fully
+# populated by the time pandas (which imports numpy) is loaded — the
+# Series dispatch inside `_float_function` references `hipy.lib.pandas`
+# at call-time only, so this ordering is safe even though the two
+# shims import each other.
+import hipy.lib.pandas

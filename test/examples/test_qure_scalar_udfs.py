@@ -117,7 +117,8 @@ def test_q3():
 # ---------------------------------------------------------------------------
 @hipy.compiled_function
 def udf_q4(dfs):
-    import numpy as np
+    # Dropped inner ``import numpy as np`` (HiPy rejects nested
+    # imports); the module-level ``np`` is in scope.
     return np.exp(dfs / 50) + 10
 
 
@@ -128,9 +129,12 @@ def fn_q4():
         print(v)
 
 
-@pytest.mark.xfail(reason="numpy shim doesn't dispatch exp over a Series")
 def test_q4():
-    check_prints(fn_q4, "")
+    # np.exp(0/50)+10 = 11.0, np.exp(50/50)+10 = e+10 ≈ 12.718282
+    check_prints(fn_q4, """
+11.0
+12.718282
+""")
 
 
 # ---------------------------------------------------------------------------
