@@ -60,3 +60,37 @@ def test_regex_span():
 (2, 5)
 123
 """)
+
+
+@hipy.compiled_function
+def fn_regex_match_str():
+    # Match.__str__ (hipy/lib/re.py:31) — `<Match object; span=..., match='...'>`.
+    # Exercised by passing a Match to print() directly (not its .group()).
+    m = re.search("(\d+)", not_constant("xx123yy"))
+    if m is not None:
+        print(str(m))
+
+
+def test_regex_match_str():
+    check_prints(fn_regex_match_str, """
+<Match object; span=(2, 5), match='123'>
+""")
+
+
+@hipy.compiled_function
+def fn_regex_match_topython():
+    # Match.__topython__ (hipy/lib/re.py:27) — fallback path that re-runs the
+    # search via the real `re` module. Triggered by handing a Match across
+    # the hipy→python boundary via intrinsics.to_python.
+    m = re.search("(\d+)", not_constant("abc42def"))
+    if m is not None:
+        py_m = intrinsics.to_python(m)
+        print(py_m.group(0))
+        print(py_m.span())
+
+
+def test_regex_match_topython():
+    check_prints(fn_regex_match_topython, """
+42
+(3, 5)
+""", fallback=True)

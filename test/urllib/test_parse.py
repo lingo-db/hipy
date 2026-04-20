@@ -103,3 +103,25 @@ def test_urlparse_topython():
 http
 /path
 """, fallback=True)
+
+
+@hipy.compiled_function
+def fn_urlsplit_topython():
+    # SplitResult.__topython__ (hipy/lib/urllib/parse.py:94) — mirrors the
+    # ParseResult case but for the shorter 5-field SplitResult produced by
+    # urlsplit directly.
+    r = urlsplit(not_constant("https://host:8080/path?x=1#frag"))
+    p = intrinsics.to_python(r)
+    print(p.scheme)
+    print(p.netloc)
+    print(p.query)
+    print(p.fragment)
+
+
+def test_urlsplit_topython():
+    check_prints(fn_urlsplit_topython, """
+https
+host:8080
+x=1
+frag
+""", fallback=True)
