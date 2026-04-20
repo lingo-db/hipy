@@ -941,6 +941,14 @@ class Series(Value):
     def __create__(data=None, index=None,name=None):
         if data is None:
             intrinsics.not_implemented()
+        if intrinsics.isa(data, Series):
+            # pd.Series(series) should round-trip: use the input's
+            # column/index directly rather than iterating element-by-
+            # element (which would lose type info for non-int/float
+            # columns).
+            if index is None:
+                index = data.index
+            return Series._create_raw(data._data, index, name=name)
         if intrinsics.isa(data, hipy.lib.numpy.ndarray):
             # 1-D ndarray → materialise into a list of Python-native
             # scalars so the regular list-based construction path runs.

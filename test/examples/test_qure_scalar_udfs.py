@@ -35,8 +35,8 @@ import numpy as np
 # ---------------------------------------------------------------------------
 @hipy.compiled_function
 def udf_q1(dfs1, dfs2, dfs3, dfs4):
-    import numpy as np
-    import pandas as pd
+    # Dropped nested ``import numpy as np`` / ``import pandas as pd``
+    # — HiPy forbids inner imports; module-level np / pd are in scope.
     rs = np.minimum(np.abs(dfs1 - dfs3), np.abs(dfs1 - dfs3 - 360))
     res = np.sqrt(np.power(rs, 2) + np.power(dfs4 - dfs2, 2))
     return pd.Series(res)
@@ -44,17 +44,26 @@ def udf_q1(dfs1, dfs2, dfs3, dfs4):
 
 @hipy.compiled_function
 def fn_q1():
-    s1 = pd.Series(not_constant([10, 20, 30]))
-    s2 = pd.Series(not_constant([1, 2, 3]))
-    s3 = pd.Series(not_constant([4, 5, 6]))
-    s4 = pd.Series(not_constant([7, 8, 9]))
+    # Use float series so the `** 2.0` path takes the scalar.float.pow
+    # route; the original UDF doesn't restrict dtypes.
+    s1 = pd.Series(not_constant([10.0, 20.0, 30.0]))
+    s2 = pd.Series(not_constant([1.0, 2.0, 3.0]))
+    s3 = pd.Series(not_constant([4.0, 5.0, 6.0]))
+    s4 = pd.Series(not_constant([7.0, 8.0, 9.0]))
     for v in udf_q1(s1, s2, s3, s4):
         print(v)
 
 
-@pytest.mark.xfail(reason="numpy shim lacks minimum/abs/power over Series")
 def test_q1():
-    check_prints(fn_q1, "")
+    # rs = min(|a-c|, |a-c-360|); res = sqrt(rs² + (d-b)²)
+    # row 0: rs=min(6,354)=6, dy=6, res=sqrt(36+36)=sqrt(72)≈8.485281
+    # row 1: rs=min(15,345)=15, dy=6, res=sqrt(225+36)=sqrt(261)≈16.155494
+    # row 2: rs=min(24,336)=24, dy=6, res=sqrt(576+36)=sqrt(612)≈24.738634
+    check_prints(fn_q1, """
+8.485281
+16.155494
+24.738634
+""")
 
 
 # ---------------------------------------------------------------------------

@@ -5,6 +5,7 @@ import sys
 
 import hipy
 from hipy import intrinsics, ir
+import hipy.lib.builtins as builtins
 from hipy.lib.builtins import _const_int, _const_float
 from hipy.value import SimpleType, Value, Type, raw_module, ValueHolder, TypeValue, HLCFunctionValue
 
@@ -407,6 +408,54 @@ def _float_function(op, x):
         return x.apply(lambda v: _float_function(op, v))
     else:
         intrinsics.not_implemented()
+@hipy.compiled_function
+def abs(x):
+    # Elementwise abs over scalars, ndarrays, and pandas Series.
+    # https://numpy.org/doc/stable/reference/generated/numpy.absolute.html
+    if intrinsics.isa(x, ndarray):
+        return _array_apply_scalar(x, lambda v: builtins.abs(v))
+    elif intrinsics.isa(x, hipy.lib.pandas.Series):
+        return x.abs()
+    else:
+        return builtins.abs(x)
+
+
+@hipy.compiled_function
+def _binary_function(a, b, fn):
+    # Elementwise binary op dispatch across scalars / ndarrays / Series.
+    # numpy's ufuncs broadcast both arguments; we support the common
+    # shapes here (array op scalar, array op array, Series op scalar,
+    # Series op Series, scalar op scalar).
+    if intrinsics.isa(a, hipy.lib.pandas.Series):
+        if intrinsics.isa(b, hipy.lib.pandas.Series):
+            return a._element_wise(b, fn)
+        else:
+            return a._element_wise(b, fn)
+    elif intrinsics.isa(b, hipy.lib.pandas.Series):
+        return b._element_wise(a, lambda x, y: fn(y, x))
+    elif intrinsics.isa(a, ndarray):
+        if intrinsics.isa(b, ndarray):
+            return _array_binary_element_wise(a, b, fn)
+        else:
+            return _array_apply_scalar(a, lambda v: fn(v, b))
+    elif intrinsics.isa(b, ndarray):
+        return _array_apply_scalar(b, lambda v: fn(a, v))
+    else:
+        return fn(a, b)
+
+
+@hipy.compiled_function
+def minimum(a, b):
+    # https://numpy.org/doc/stable/reference/generated/numpy.minimum.html
+    return _binary_function(a, b, lambda x, y: x if x < y else y)
+
+
+@hipy.compiled_function
+def power(a, b):
+    # https://numpy.org/doc/stable/reference/generated/numpy.power.html
+    return _binary_function(a, b, lambda x, y: x ** y)
+
+
 @hipy.compiled_function
 def sin(x):
     return _float_function("sin", x)
