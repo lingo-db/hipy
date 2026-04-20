@@ -749,6 +749,27 @@ def zeros(shape, dtype=float64, order='C', like=None):
 def zeros_like(a):
     return zeros(a.shape, a._dtype)
 
+@hipy.compiled_function
+def linspace(start, stop, num=50, endpoint=True, retstep=False, dtype=None, axis=0):
+    intrinsics.only_implemented_if(retstep == False, axis == 0, dtype is None)
+    shape = (num,)
+    res = empty(shape, float64)
+    start_f = float(start)
+    stop_f = float(stop)
+    if num == 1:
+        step = 0.0
+    else:
+        if endpoint:
+            step = (stop_f - start_f) / float(num - 1)
+        else:
+            step = (stop_f - start_f) / float(num)
+    fill_fn = intrinsics.bind(
+        lambda indices: float64(start_f + float(indices[0]) * step),
+        [intrinsics.typeof(shape)],
+    )
+    intrinsics.call_builtin("array.fill", None, [res, fill_fn])
+    return res
+
 @hipy.raw
 def _infer_shape_dtype_of_nested_list(l,_context):
     def _infer_shape_dtype_of_nested_list_(t):

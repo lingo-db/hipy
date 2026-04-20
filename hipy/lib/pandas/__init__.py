@@ -938,6 +938,11 @@ class Series(Value):
     def __create__(data=None, index=None,name=None):
         if data is None:
             intrinsics.not_implemented()
+        if intrinsics.isa(data, hipy.lib.numpy.ndarray):
+            # 1-D ndarray → materialise into a list of Python-native
+            # scalars so the regular list-based construction path runs.
+            intrinsics.only_implemented_if(len(data.shape) == 1)
+            data = [_to_python_type(data[i]) for i in range(data.shape[0])]
         if data._element_type == int or data._element_type == float:
             data= [_to_native_type(val) for val in data]
         concrete_values = None

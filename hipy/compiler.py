@@ -864,6 +864,12 @@ def stage_stmt(stmt, context: StageContext):
                         body=[early_return], lineno=lineno, col_offset=col_offset)], orelse=[], finalbody=[],
                         lineno=lineno, col_offset=col_offset)
             )
+            # A variable that is first defined (or reassigned) inside the
+            # if/else body is only reachable afterwards through the tuple
+            # assignment above — surface them in `available_variables` so
+            # later-staged lambdas treat them as free-variable candidates.
+            for var in changed_variables:
+                context.available_variables.add(var)
         case ast.Return(value=value, lineno=lineno, col_offset=col_offset):
             if context.nested:
                 if value is None:

@@ -447,8 +447,8 @@ Cleaned Comment: importantnote, Word Count: 1, Flag: Urgent
 # ---------------------------------------------------------------------------
 @hipy.compiled_function
 def udf_q14(dfs):
-    import pandas as pd
-    import numpy as np
+    # Dropped inner ``import pandas as pd`` / ``import numpy as np`` —
+    # HiPy forbids nested imports; module-level pd / np are in scope.
     return pd.Series(np.linspace(0, 1, len(dfs)))
 
 
@@ -459,9 +459,15 @@ def fn_q14():
         print(v)
 
 
-@pytest.mark.xfail(reason="numpy shim lacks np.linspace")
 def test_q14():
-    check_prints(fn_q14, "")
+    # np.linspace(0, 1, 4) → [0, 1/3, 2/3, 1]. Those middle values round
+    # through HiPy's 6-digit float_to_string as 0.333333 / 0.666667.
+    check_prints(fn_q14, """
+0.0
+0.333333
+0.666667
+1.0
+""")
 
 
 # ---------------------------------------------------------------------------
