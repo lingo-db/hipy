@@ -324,6 +324,8 @@ class CPPBackend:
                 return binary_op(lambda x, y: f"{x}*{y}")
             case "scalar.float.div":
                 return binary_op(lambda x, y: f"{x}/{y}")
+            case "scalar.float.mod":
+                return binary_op(lambda x, y: f"builtin::floormod((double){x},(double){y})")
             case "scalar.float.compare.lt":
                 return binary_op(lambda x, y: f"{x}<{y}")
             case "scalar.float.compare.gt":

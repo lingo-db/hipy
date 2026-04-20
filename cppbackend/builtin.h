@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <fstream>
 #include <format>
+#include <cmath>
 #include<unordered_map>
         #include <regex>
         #include <tuple>
@@ -53,6 +54,16 @@ namespace builtin {
         int64_t r = a % b;
         if (r != 0 && ((r < 0) != (b < 0))) r += b;
         return r;
+    }
+
+    inline double floormod(double a, double b) {
+        double r = std::fmod(a, b);
+        if (r != 0.0 && ((r < 0.0) != (b < 0.0))) r += b;
+        return r;
+    }
+
+    inline double floordiv(double a, double b) {
+        return std::floor(a / b);
     }
 
     template<class X>
