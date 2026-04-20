@@ -28,6 +28,8 @@ import hipy.lib.pandas
 import pandas as pd
 import hipy.lib.numpy
 import numpy as np
+import hipy.lib.sys  # noqa: F401 — registers the `sys` shim for the q11 UDF
+import hipy.lib.math  # noqa: F401 — registers the `math` shim for the q11 UDF
 
 
 # ---------------------------------------------------------------------------
@@ -395,9 +397,14 @@ def fn_q11():
         print(v)
 
 
-@pytest.mark.xfail(reason="Needs np.empty + boolean-mask ndarray indexing/assignment and a sys.float_info shim")
 def test_q11():
-    check_prints(fn_q11, "")
+    # The single input row has |dfs1-dfs3|=5 > MAX_ANGLE=2 and
+    # |dfs2-dfs4|=5 > MAX_ANGLE=2, so the mask is True and the row gets
+    # the sys.float_info.max sentinel. HiPy's C++ backend prints floats
+    # in full decimal rather than scientific notation.
+    check_prints(fn_q11, """
+179769313486231570814527423731704356798070567525844996598917476803157260780028538760589558632766878171540458953514382464234321326889464182768467546703537516986049910576551282076245490090389328944075868508455133942304583236903222948165808559332123348274797826204144723168738177180919299881250404026184124858368.0
+""")
 
 
 # ---------------------------------------------------------------------------
@@ -565,9 +572,12 @@ def fn_q16():
             print(v)
 
 
-@pytest.mark.xfail(reason="HiPy doesn't compile generator (``yield``) functions")
 def test_q16():
-    check_prints(fn_q16, "")
+    check_prints(fn_q16, """
+3
+4
+5
+""")
 
 
 # ---------------------------------------------------------------------------

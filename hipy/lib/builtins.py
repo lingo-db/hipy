@@ -5,6 +5,11 @@ from typing import List, Tuple, Dict, Any
 
 from builtins import *
 import builtins
+# Re-expose Python's __import__ so compiled functions that contain nested
+# ``import`` statements (e.g. ``import sys`` inside a UDF body) can find it
+# via the staged function's __builtins__ — `from builtins import *` skips
+# dunders.
+__import__ = builtins.__import__
 import hipy
 from hipy.value import CValue, ValueHolder, Value, HLCClassValue, TypeValue, Type, SimpleType, static_object, RawValue, \
     AnyType, ConstIterValue, HLCFunctionValue

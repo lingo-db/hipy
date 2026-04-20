@@ -690,6 +690,19 @@ class ndarray(Value):
 
     @hipy.compiled_function
     def __setitem__(self, key, value):
+        if intrinsics.isa(key, hipy.lib.pandas.Series):
+            # Boolean-mask assignment: ``res[mask] = scalar`` fills True
+            # positions with scalar; ``res[mask] = seq`` walks ``seq`` over
+            # those same True positions in order. Delegate to a helper
+            # per value shape so each for-loop body lives in its own
+            # function scope (avoids the UnboundLocalError the staging
+            # rewriter raises when ``i`` would otherwise span branches).
+            intrinsics.only_implemented_if(len(self.shape) == 1)
+            if intrinsics.isa(value, hipy.lib.pandas.Series):
+                _mask_set_series(self, key._data, value._data)
+            else:
+                _mask_set_scalar(self, key._data, _convert_to_dtype(value, self._dtype))
+            return
         if intrinsics.isa(key, int):
             key= (key,)
         if intrinsics.isa(key, slice):
@@ -791,6 +804,24 @@ class _concrete_ndarray(ndarray):
 
 
 
+
+
+@hipy.compiled_function
+def _mask_set_scalar(arr, mask_col, value):
+    n = arr.shape[0]
+    for i in range(n):
+        if mask_col.get_by_index(i):
+            arr[i] = value
+
+
+@hipy.compiled_function
+def _mask_set_series(arr, mask_col, val_col):
+    n = arr.shape[0]
+    j = 0
+    for i in range(n):
+        if mask_col.get_by_index(i):
+            arr[i] = val_col.get_by_index(j)
+            j += 1
 
 
 @hipy.compiled_function

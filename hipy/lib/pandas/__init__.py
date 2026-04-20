@@ -1035,6 +1035,18 @@ class Series(Value):
     def __truediv__(self, other):
         return self._element_wise(other, lambda a, b: a / b)
     @hipy.compiled_function
+    def __radd__(self, other):
+        return self._element_wise(other, lambda a, b: b + a)
+    @hipy.compiled_function
+    def __rsub__(self, other):
+        return self._element_wise(other, lambda a, b: b - a)
+    @hipy.compiled_function
+    def __rmul__(self, other):
+        return self._element_wise(other, lambda a, b: b * a)
+    @hipy.compiled_function
+    def __rtruediv__(self, other):
+        return self._element_wise(other, lambda a, b: b / a)
+    @hipy.compiled_function
     def add(self,other):
         return self+other
     @hipy.compiled_function
@@ -1151,6 +1163,15 @@ class Series(Value):
             for col in index_cols:
                 cols[col] = index_cols[col]
             tmp_table = table(cols).get_slice(item)
+            return Series._create_raw(tmp_table.get_column("__col__"),
+                                      self.index._update(tmp_table))
+        elif intrinsics.isa(item, Series):
+            # Boolean-mask indexing: keep rows where the mask Series is True.
+            cols = {'__col__': self._data}
+            index_cols = self.index._columns()
+            for col in index_cols:
+                cols[col] = index_cols[col]
+            tmp_table = table(cols).filter_by_column(item._data)
             return Series._create_raw(tmp_table.get_column("__col__"),
                                       self.index._update(tmp_table))
         else:

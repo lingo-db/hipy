@@ -1282,7 +1282,40 @@ def rewrite_loop_if_continue(body):
     return [rewriter.visit(stmt) for stmt in body]
 
 
+def rewrite_yield_to_listcomp(body):
+    # Generator functions aren't staged as state machines. The one shape
+    # the cogen can handle is the "list comprehension in disguise":
+    #   for <target> in <iter>: yield <elt>
+    # which is rewritten to `return [<elt> for <target> in <iter>]`. A
+    # list (not a genexp) keeps the result iterable through the
+    # ``__constiter__`` path, which is the only way values without a
+    # proper IR type (e.g. pandas.Series) can flow through an iteration.
+    def has_yield(stmt):
+        return any(isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(stmt))
+
+    if not any(has_yield(s) for s in body):
+        return body
+
+    if len(body) != 1 or not isinstance(body[0], ast.For) or body[0].orelse:
+        raise NotImplementedError(
+            "Generator functions are only supported when the entire body is a single `for <target> in <iter>: yield <elt>`")
+    loop = body[0]
+    if len(loop.body) != 1:
+        raise NotImplementedError("Generator for-loop body must be a single `yield` statement")
+    inner = loop.body[0]
+    if not (isinstance(inner, ast.Expr) and isinstance(inner.value, ast.Yield) and inner.value.value is not None):
+        raise NotImplementedError("Generator for-loop body must be a single `yield <expr>`")
+
+    lineno, col_offset = loop.lineno, loop.col_offset
+    list_comp = ast.ListComp(
+        elt=inner.value.value,
+        generators=[ast.comprehension(target=loop.target, iter=loop.iter, ifs=[], is_async=0)],
+        lineno=lineno, col_offset=col_offset)
+    return [ast.Return(value=list_comp, lineno=lineno, col_offset=col_offset)]
+
+
 def rewrite_func(body):
+    body = rewrite_yield_to_listcomp(body)
     body = rewrite_if_return(body)
     body = rewrite_loop_break(body)
     body = rewrite_loop_if_continue(body)
