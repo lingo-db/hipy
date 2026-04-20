@@ -722,11 +722,11 @@ class _NotRelevantType(Type):
 
 @hipy.decorators.classdef
 class LambdaValue(Value):
-    def __init__(self, staged, bind_python, bind_staged):
+    def __init__(self, staged, bind_python, bind_staged, value=None):
         self.staged = staged
         self.bind_python = bind_python
         self.bind_staged = bind_staged
-        super().__init__(None)
+        super().__init__(value)
 
     @hipy.raw
     def __topython__(self, _context):
@@ -744,11 +744,30 @@ class LambdaValue(Value):
         res = self.value.bind_python(convert)
         return res
 
+    class LambdaValueType(Type):
+        def __init__(self, staged, bind_python, bind_staged):
+            self.staged = staged
+            self.bind_python = bind_python
+            self.bind_staged = bind_staged
+
+        def ir_type(self):
+            return ir.void
+
+        def construct(self, value, context):
+            return LambdaValue(self.staged, self.bind_python, self.bind_staged, value=value)
+
+        def __eq__(self, other):
+            return isinstance(other, self.__class__) and self.staged == other.staged
+
+    def __abstract__(self, context):
+        return context.wrap(LambdaValue(self.staged, self.bind_python, self.bind_staged,
+                                        value=ir.Constant(context.block, None, ir.void).result))
+
     def __hipy_create_type__(self, *args):
-        return _NotRelevantType()
+        return LambdaValue.LambdaValueType(self.staged, self.bind_python, self.bind_staged)
 
     def __hipy_get_type__(self):
-        return _NotRelevantType()
+        return LambdaValue.LambdaValueType(self.staged, self.bind_python, self.bind_staged)
 
 @hipy.decorators.classdef
 class GeneratorExpressionValue(Value):
