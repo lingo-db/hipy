@@ -340,6 +340,9 @@ class int(Value):
             return intrinsics.call_builtin("scalar.int." + op, int, [left, right])
         elif intrinsics.isa(other, bool):
             return self._int_op(op, int(other), reverse)
+        elif intrinsics.isa(other, float):
+            # Promote self (int) to float and defer to float's op.
+            return float(self)._float_op(op, other, reverse)
         else:
             intrinsics.not_implemented()
 
@@ -347,6 +350,9 @@ class int(Value):
     def _cmp_op(self, op, other):
         if intrinsics.isa(other, int):
             return intrinsics.call_builtin("scalar.int.compare." + op, bool, [self, other])
+        elif intrinsics.isa(other, float):
+            # Promote self (int) to float and defer to float's comparison.
+            return float(self)._cmp_op(op, other)
         else:
             intrinsics.not_implemented()
 

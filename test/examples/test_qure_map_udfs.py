@@ -365,12 +365,14 @@ def fn_q10():
     print(udf_q10(df))
 
 
-@pytest.mark.xfail(reason="df.iterrows works, but the UDF seeds `taxmax = -1` (int) "
-                          "and then writes `taxmax = max(taxmax, float_expr)` inside the "
-                          "loop. HiPy's for-loop SSA merge can't unify int with float into "
-                          "a single numeric type, so taxmax ends up typed `object` and the "
-                          "final `pd.DataFrame({\"l_taxmax\": [taxmax]})` fails when the "
-                          "column builder sees an object-typed list.")
+@pytest.mark.xfail(reason="df.iterrows itself works; the blocker is the UDF's "
+                          "`taxmax = -1` (int) followed by `taxmax = max(taxmax, float_expr)` "
+                          "in the loop. HiPy's static types would have to merge `int | float` "
+                          "at each iteration's re-assignment, which has no single right answer "
+                          "(Python keeps whichever branch ran), so the merge falls back to "
+                          "pyobj and the final `pd.DataFrame({\"l_taxmax\": [taxmax]})` column "
+                          "builder rejects the object-typed list. Initializing `taxmax = -1.0` "
+                          "would sidestep this.")
 def test_q10():
     check_prints(fn_q10, "")
 
