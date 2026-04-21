@@ -263,9 +263,15 @@ def fn_q7():
     print(udf_q7(df))
 
 
-@pytest.mark.xfail(reason="pd.merge inside a compiled function is not currently supported")
 def test_q7():
-    check_prints(fn_q7, "")
+    # Inner join on l_shipmode against the code table:
+    # AIR→0, MAIL→1, TRUCK→4.
+    check_prints(fn_q7, """
+   l_linenumber  l_shipmodecode
+0             1               0
+1             2               1
+2             3               4
+""")
 
 
 # ---------------------------------------------------------------------------
@@ -433,9 +439,16 @@ def fn_q13():
     print(udf_q13(df))
 
 
-@pytest.mark.xfail(reason="Series.min on a date/string column is not supported")
 def test_q13():
-    check_prints(fn_q13, "")
+    # min over ISO date strings is lexicographically / chronologically
+    # the same, so oldest_date='2024-01-05'. Every shipdate is after that,
+    # so the filter keeps all three rows.
+    check_prints(fn_q13, """
+   l_linenumber  l_shipdate l_commitdate
+0             1  2024-01-10   2024-01-05
+1             2  2024-02-10   2024-02-15
+2             3  2024-03-10   2024-03-01
+""")
 
 
 # ---------------------------------------------------------------------------

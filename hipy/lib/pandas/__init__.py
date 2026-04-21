@@ -1290,44 +1290,95 @@ class Series(Value):
         # Arithmetic mean, skipping NaN is not yet modelled separately.
         return float(self.sum()) / float(len(self))
 
+    @staticmethod
+    @hipy.compiled_function
+    def _minmax_combine(left, right, take_left):
+        if left[0] and right[0]:
+            return (True, left[1] if take_left(left[1], right[1]) else right[1])
+        elif left[0]:
+            return left
+        else:
+            return right
+
     @hipy.compiled_function
     def min(self):
-        # Seed the fold with the maximum representable value of the
-        # element-type's domain so the accumulator type matches and we
-        # avoid the (valid, value) tuple dance Series.sum uses.
+        # Numeric element types seed the fold with the far end of the
+        # domain so the accumulator type matches the element type.
+        # String / other element types fall back to a (valid, value)
+        # tuple fold because there is no greatest representable string.
         if self._element_type == float:
-            init = 1.7976931348623157e308
+            return self._data.aggregate(
+                1.7976931348623157e308,
+                lambda a, b: a if a < b else b,
+                lambda a, b: a if a < b else b,
+            )
         elif self._element_type == int:
-            init = 9223372036854775807
+            return self._data.aggregate(
+                9223372036854775807,
+                lambda a, b: a if a < b else b,
+                lambda a, b: a if a < b else b,
+            )
         elif self._element_type == np.float64:
-            init = np.float64(1.7976931348623157e308)
+            return self._data.aggregate(
+                np.float64(1.7976931348623157e308),
+                lambda a, b: a if a < b else b,
+                lambda a, b: a if a < b else b,
+            )
         elif self._element_type == np.int64:
-            init = np.int64(9223372036854775807)
+            return self._data.aggregate(
+                np.int64(9223372036854775807),
+                lambda a, b: a if a < b else b,
+                lambda a, b: a if a < b else b,
+            )
         else:
-            intrinsics.not_implemented()
-        return self._data.aggregate(
-            init,
-            lambda a, b: a if a < b else b,
-            lambda a, b: a if a < b else b,
-        )
+            undef = intrinsics.undef(self._element_type)
+            res = self._data.aggregate(
+                (False, undef),
+                lambda a, b: (True, a[1] if a[1] < b else b) if a[0] else (True, b),
+                lambda l, r: Series._minmax_combine(l, r, lambda x, y: x < y),
+            )
+            if res[0]:
+                return res[1]
+            else:
+                return undef
 
     @hipy.compiled_function
     def max(self):
         if self._element_type == float:
-            init = -1.7976931348623157e308
+            return self._data.aggregate(
+                -1.7976931348623157e308,
+                lambda a, b: a if a > b else b,
+                lambda a, b: a if a > b else b,
+            )
         elif self._element_type == int:
-            init = -9223372036854775808
+            return self._data.aggregate(
+                -9223372036854775808,
+                lambda a, b: a if a > b else b,
+                lambda a, b: a if a > b else b,
+            )
         elif self._element_type == np.float64:
-            init = np.float64(-1.7976931348623157e308)
+            return self._data.aggregate(
+                np.float64(-1.7976931348623157e308),
+                lambda a, b: a if a > b else b,
+                lambda a, b: a if a > b else b,
+            )
         elif self._element_type == np.int64:
-            init = np.int64(-9223372036854775808)
+            return self._data.aggregate(
+                np.int64(-9223372036854775808),
+                lambda a, b: a if a > b else b,
+                lambda a, b: a if a > b else b,
+            )
         else:
-            intrinsics.not_implemented()
-        return self._data.aggregate(
-            init,
-            lambda a, b: a if a > b else b,
-            lambda a, b: a if a > b else b,
-        )
+            undef = intrinsics.undef(self._element_type)
+            res = self._data.aggregate(
+                (False, undef),
+                lambda a, b: (True, a[1] if a[1] > b else b) if a[0] else (True, b),
+                lambda l, r: Series._minmax_combine(l, r, lambda x, y: x > y),
+            )
+            if res[0]:
+                return res[1]
+            else:
+                return undef
 
     @hipy.compiled_function
     def quantile(self, q):
