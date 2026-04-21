@@ -1469,6 +1469,13 @@ class Series(Value):
         # the accumulator stays in a native float column.
         sq_sum = float(self.apply(lambda x: (float(x) - m) ** 2.0).sum())
         return math.sqrt(sq_sum / float(len(self) - ddof))
+
+    @hipy.compiled_function
+    def var(self, ddof=1):
+        # Sample variance. Mirrors Series.std but skips the final sqrt.
+        m = self.mean()
+        sq_sum = float(self.apply(lambda x: (float(x) - m) ** 2.0).sum())
+        return sq_sum / float(len(self) - ddof)
     @hipy.compiled_function
     def fillna(self, value):
         if intrinsics.isa(value, self._element_type):
