@@ -1555,9 +1555,15 @@ class Timestamp(Value):
 
 
 @hipy.compiled_function
-def to_datetime(s):
-    if intrinsics.isa(s, Series):
-        return s.apply(lambda x: Timestamp(x))
+def to_datetime(arg, errors='raise', format=None):
+    # pandas' to_datetime has many shapes. This shim supports a Series of
+    # ISO-format strings (always parseable), so errors='raise'/'coerce'/
+    # 'ignore' all collapse to successful parsing. The `format` kwarg is
+    # accepted for API parity but isn't actually consulted — Timestamp
+    # parses ISO dates directly.
+    intrinsics.only_implemented_if(errors == 'raise' or errors == 'coerce' or errors == 'ignore')
+    if intrinsics.isa(arg, Series):
+        return arg.apply(lambda x: Timestamp(x))
     else:
         intrinsics.not_implemented()
 
