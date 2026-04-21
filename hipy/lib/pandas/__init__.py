@@ -1476,6 +1476,19 @@ class Series(Value):
         m = self.mean()
         sq_sum = float(self.apply(lambda x: (float(x) - m) ** 2.0).sum())
         return sq_sum / float(len(self) - ddof)
+
+    @hipy.compiled_function
+    def corr(self, other):
+        # Pearson correlation coefficient between two Series. Assumes
+        # the two inputs have the same length and aligned rows.
+        intrinsics.only_implemented_if(intrinsics.isa(other, Series))
+        mx = self.mean()
+        my = other.mean()
+        dx = self.apply(lambda x: float(x) - mx)
+        dy = other.apply(lambda y: float(y) - my)
+        n = len(self)
+        cov = float((dx * dy).sum()) / float(n - 1)
+        return cov / (self.std() * other.std())
     @hipy.compiled_function
     def fillna(self, value):
         if intrinsics.isa(value, self._element_type):
