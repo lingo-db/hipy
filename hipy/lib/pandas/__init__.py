@@ -682,30 +682,25 @@ class DataFrame(Value):
     def __setitem__(self, key, value):
         if intrinsics.isa(key, _const_str):
             if intrinsics.isa(value, Series):
-                if key in self._col_versions:
-                    # case 1: column already exists -> update version and set new column
-                    version = self._col_versions[key]
-                    self._col_versions[key] = version + 1
-                    new_table = self._table.set_column(key, value._data)
-                    self._table = new_table
-                else:
-                    # case 2: column does not exist -> add new column
-                    self._col_versions[key] = 0
-                    self._col_types[key] = value._element_type
-                    new_table = self._table.set_column(key, value._data)
-                    self._table = new_table
+                new_col = value._data
+                col_elem_type = value._element_type
+            elif intrinsics.isa(value, list):
+                # A length-N list becomes a length-N column.
+                new_col = column(value)
+                col_elem_type = new_col._element_type
             else:
                 # Scalar: broadcast `value` across every row of the frame by
                 # applying a constant lambda to an arbitrary existing column.
                 first_col_name = list(self._col_versions)[0]
                 first_col = self._table.get_column(first_col_name)
                 new_col = first_col.apply(lambda _x: value)
-                if key in self._col_versions:
-                    self._col_versions[key] = self._col_versions[key] + 1
-                else:
-                    self._col_versions[key] = 0
-                    self._col_types[key] = intrinsics.typeof(value)
-                self._table = self._table.set_column(key, new_col)
+                col_elem_type = new_col._element_type
+            if key in self._col_versions:
+                self._col_versions[key] = self._col_versions[key] + 1
+            else:
+                self._col_versions[key] = 0
+                self._col_types[key] = col_elem_type
+            self._table = self._table.set_column(key, new_col)
         else:
             intrinsics.not_implemented()
 

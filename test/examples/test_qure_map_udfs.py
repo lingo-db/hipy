@@ -199,9 +199,15 @@ def fn_q5():
     print(udf_q5(df))
 
 
-@pytest.mark.xfail(reason="Boolean list-comp element-assignment to a DataFrame column is not supported")
 def test_q5():
-    check_prints(fn_q5, "")
+    # quantity>25 or <10: only 30 qualifies (True for row 2).
+    # discount<0.7 and >0.2: only 0.3 qualifies (True for row 2).
+    check_prints(fn_q5, """
+   l_quantity1  l_discount1
+0        False        False
+1        False        False
+2         True         True
+""")
 
 
 # ---------------------------------------------------------------------------
