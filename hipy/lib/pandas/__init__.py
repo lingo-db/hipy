@@ -1635,6 +1635,67 @@ class Series(Value):
         return DataFrame._create_raw(new_table, new_index)
 
 @hipy.classdef
+class _MonthOffset(Value):
+    # Result of subtracting two month-periods. `.n` reports the offset
+    # count, mirroring pandas.tseries.offsets.DateOffset.n.
+    __HIPY_MUTABLE__ = False
+
+    def __init__(self, value):
+        super().__init__(value)
+
+    def __hipy_get_type__(self):
+        return SimpleType(_MonthOffset, ir.i64)
+
+    @staticmethod
+    def __hipy_create_type__(*args):
+        return SimpleType(_MonthOffset, ir.i64)
+
+    @hipy.compiled_function
+    def __topython__(self):
+        # Minimal fallback: expose as pd.tseries.offsets.DateOffset(months=n).
+        return pd.tseries.offsets.DateOffset(months=intrinsics.reinterpret(self, int))
+
+    @hipy.compiled_function
+    def __hipy_getattr__(self, key):
+        if key == "n":
+            return intrinsics.reinterpret(self, int)
+        else:
+            intrinsics.not_implemented()
+
+
+@hipy.classdef
+class _MonthPeriod(Value):
+    # Minimal shim for `pd.Timestamp.to_period('M')`. Stored as
+    # year*12 + (month-1), so subtraction of two month-periods is a
+    # plain int subtraction yielding a _MonthOffset.
+    __HIPY_MUTABLE__ = False
+
+    def __init__(self, value):
+        super().__init__(value)
+
+    def __hipy_get_type__(self):
+        return SimpleType(_MonthPeriod, ir.i64)
+
+    @staticmethod
+    def __hipy_create_type__(*args):
+        return SimpleType(_MonthPeriod, ir.i64)
+
+    @hipy.compiled_function
+    def __topython__(self):
+        n = intrinsics.reinterpret(self, int)
+        return pd.Period(year=n // 12, month=(n % 12) + 1, freq='M')
+
+    @hipy.compiled_function
+    def __sub__(self, other):
+        if intrinsics.isa(other, _MonthPeriod):
+            lhs = intrinsics.reinterpret(self, int)
+            rhs = intrinsics.reinterpret(other, int)
+            return intrinsics.reinterpret(lhs - rhs, _MonthOffset)
+        else:
+            intrinsics.not_implemented()
+
+
+@hipy.classdef
 class Timestamp(Value):
     def __init__(self, value):
         super().__init__(value)
@@ -1668,6 +1729,17 @@ class Timestamp(Value):
             return intrinsics.call_builtin("date.get_hour",int,[self])
         elif key=="year":
             return intrinsics.call_builtin("date.get_year",int,[self])
+        else:
+            intrinsics.not_implemented()
+
+    @hipy.compiled_function
+    def to_period(self, freq):
+        # Minimal support: 'M' (monthly). Encodes year*12 + (month-1) as
+        # a month ordinal so period subtraction is plain int arithmetic.
+        if freq == 'M':
+            y = intrinsics.call_builtin("date.get_year", int, [self])
+            m = intrinsics.call_builtin("date.get_month", int, [self])
+            return intrinsics.reinterpret(y * 12 + (m - 1), _MonthPeriod)
         else:
             intrinsics.not_implemented()
 
