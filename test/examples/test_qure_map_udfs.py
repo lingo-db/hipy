@@ -365,7 +365,12 @@ def fn_q10():
     print(udf_q10(df))
 
 
-@pytest.mark.xfail(reason="df.iterrows with per-row column lookup is not supported")
+@pytest.mark.xfail(reason="df.iterrows works, but the UDF seeds `taxmax = -1` (int) "
+                          "and then writes `taxmax = max(taxmax, float_expr)` inside the "
+                          "loop. HiPy's for-loop SSA merge can't unify int with float into "
+                          "a single numeric type, so taxmax ends up typed `object` and the "
+                          "final `pd.DataFrame({\"l_taxmax\": [taxmax]})` fails when the "
+                          "column builder sees an object-typed list.")
 def test_q10():
     check_prints(fn_q10, "")
 
@@ -420,9 +425,15 @@ def fn_q12():
     print(udf_q12(df))
 
 
-@pytest.mark.xfail(reason="df.iterrows with per-row column lookup is not supported")
 def test_q12():
-    check_prints(fn_q12, "")
+    # Per row, max(l_quantity, l_discount*100, l_tax*100):
+    # (10, 10, 10)→10; (20, 20, 20)→20; (30, 30, 30)→30.
+    check_prints(fn_q12, """
+   l_taxmax
+0      10.0
+1      20.0
+2      30.0
+""")
 
 
 # ---------------------------------------------------------------------------

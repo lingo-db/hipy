@@ -10,7 +10,7 @@ import sys
 
 import hipy
 from hipy import intrinsics, ir
-from hipy.lib._tabular import column, table
+from hipy.lib._tabular import column, table, row as _row
 import hipy.lib.builtins as builtins
 import hipy.lib.math
 from hipy.lib.builtins import _concrete_dict, _const_str, _concrete_list
@@ -337,6 +337,67 @@ class _LocDFIndexer(Value):
     @hipy.compiled_function
     def __topython__(self):
         return intrinsics.to_python(self._df).loc
+
+
+@hipy.classdef
+class _DataFrameIterator(Value):
+    # Iterator returned by `df.iterrows()`. Yields (row_position, row)
+    # pairs where `row` is the underlying tabular `row` record so that
+    # `row["colname"]` resolves through `ir.RecordGet`. Modelled on
+    # `column._iterator`: the underlying IR value is the frame's table,
+    # and iteration is driven by the `table.iter` C++ builtin.
+    def __init__(self, table_val, value=None):
+        super().__init__(value)
+        self._table = table_val
+
+    def __track__(self, iter_value, context):
+        context.track_nested(iter_value, self._table)
+
+    @hipy.compiled_function
+    def __iter__(self):
+        return self
+
+    @hipy.compiled_function
+    def __itertype__(self):
+        row_t = intrinsics.create_type(_row, self._table._column_types)
+        return intrinsics.create_type(builtins.tuple, [int, row_t])
+
+    @hipy.compiled_function
+    def __iterate__(self, loopfn, x, iter_vals):
+        return intrinsics.call_builtin(
+            "table.iter", intrinsics.typeof(iter_vals),
+            [loopfn, x, iter_vals, self._table])
+
+    @hipy.compiled_function
+    def __topython__(self):
+        return intrinsics.to_python(self._table).to_pandas().iterrows()
+
+    def __abstract__(self, context):
+        self._table = self._table.as_abstract(context)
+        return _DataFrameIterator(self._table, self._table.value.__value__)
+
+    class T(Type):
+        def __init__(self, table_type):
+            self.table_type = table_type
+
+        def ir_type(self):
+            return self.table_type.ir_type()
+
+        def construct(self, value, context):
+            return _DataFrameIterator(self.table_type.construct(value, context), value)
+
+        def __eq__(self, other):
+            if isinstance(other, _DataFrameIterator.T):
+                return self.table_type == other.table_type
+            else:
+                return False
+
+    @staticmethod
+    def __hipy_create_type__(*args) -> Type:
+        return _DataFrameIterator.T(args[0])
+
+    def __hipy_get_type__(self) -> Type:
+        return _DataFrameIterator.T(self._table.__hipy_get_type__())
 
 
 
@@ -772,6 +833,11 @@ class DataFrame(Value):
     @hipy.compiled_function
     def groupby(self, by):
         return DataFrameGroupBy(self, by)
+
+    @hipy.raw
+    def iterrows(self, _context):
+        tbl = _context.get_attr(self, "_table")
+        return _context.wrap(_DataFrameIterator(tbl.as_abstract(_context)))
 
     @hipy.compiled_function
     def reset_index(self):

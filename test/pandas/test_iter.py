@@ -230,3 +230,49 @@ def fn_iter_df_then_series():
 
 def test_iter_df_then_series():
     check_prints(fn_iter_df_then_series, "66")
+
+
+# df.iterrows() — yields (row_position, row) per row, matching pandas'
+# shape for a default RangeIndex-backed frame. `row[col]` resolves a
+# value by column name at IR time.
+
+@hipy.compiled_function
+def fn_iterrows_single_col_sum():
+    df = pd.DataFrame.from_dict({"a": not_constant([1, 2, 3, 4])})
+    total = 0
+    for _, row in df.iterrows():
+        total = total + int(row["a"])
+    print(total)
+
+
+def test_iterrows_single_col_sum():
+    check_prints(fn_iterrows_single_col_sum, "10")
+
+
+@hipy.compiled_function
+def fn_iterrows_two_cols_product():
+    df = pd.DataFrame.from_dict({"a": not_constant([1.0, 2.0, 3.0]),
+                                 "b": not_constant([10.0, 20.0, 30.0])})
+    total = 0.0
+    for _, row in df.iterrows():
+        total = total + float(row["a"]) * float(row["b"])
+    print(total)
+
+
+def test_iterrows_two_cols_product():
+    # 1*10 + 2*20 + 3*30 = 140
+    check_prints(fn_iterrows_two_cols_product, "140.0")
+
+
+@hipy.compiled_function
+def fn_iterrows_index_counter():
+    # For a default RangeIndex frame, the yielded index should be 0..n-1.
+    df = pd.DataFrame.from_dict({"a": not_constant([10, 20, 30])})
+    total = 0
+    for i, _ in df.iterrows():
+        total = total + i
+    print(total)
+
+
+def test_iterrows_index_counter():
+    check_prints(fn_iterrows_index_counter, "3")

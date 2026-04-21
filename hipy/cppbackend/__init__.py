@@ -729,6 +729,30 @@ class CPPBackend:
         {self.generate_value(op.result)} = {self.generate_value(op.args[0])}({self.generate_value(op.args[1])},{self.generate_value(op.result)}, iter_val);
     }});
                 """
+            case "table.iter":
+                # args = [loopfn, read_only_inputs, initial_iter_vals, table]
+                # Threads an accumulator through a row-by-row walk of the
+                # table, mirroring column.iter. Each iteration passes a
+                # (row_position, row_record) tuple to the loop function.
+                row_idx_var = f"row_idx{self.generate_unique_id()}"
+                accessors = "\n".join(
+                    f"auto col_accessor{offset} = {get_column_accessor(m[1])}(batch->column({offset}));"
+                    for offset, m in enumerate(op.args[3].type.members))
+                row_tuple = ", ".join(
+                    f"col_accessor{offset}.access(i)"
+                    for offset, _ in enumerate(op.args[3].type.members))
+                return f"""
+    {self.generate_result(op.result)} = {self.generate_value(op.args[2])};
+    int64_t {row_idx_var} = 0;
+    {self.generate_value(op.args[3])}->iterateBatches([&](auto batch){{
+        {accessors}
+        for (int64_t i = 0; i < batch->num_rows(); i++){{
+            auto iter_tuple = std::make_tuple({row_idx_var}, std::make_tuple({row_tuple}));
+            {self.generate_value(op.result)} = {self.generate_value(op.args[0])}({self.generate_value(op.args[1])},{self.generate_value(op.result)}, iter_tuple);
+            {row_idx_var}++;
+        }}
+    }});
+                """
             case "column.unique":
                 return f"{self.generate_result(op.result)} = {self.generate_value(op.args[0])}->unique();"
             case "column.isin_column":
