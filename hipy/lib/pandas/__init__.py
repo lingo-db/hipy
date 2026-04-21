@@ -304,6 +304,41 @@ class _iLocDFIndexer(Value):
         return intrinsics.to_python(self._df).iloc
 
 
+@hipy.classdef
+class _LocDFIndexer(Value):
+    def __init__(self, df):
+        super().__init__(None)
+        self._df = df
+
+    @hipy.compiled_function
+    def __setitem__(self, item, value):
+        # df.loc[mask, colname] = scalar_value
+        if intrinsics.isa(item, tuple):
+            mask = item[0]
+            colname = item[1]
+            if intrinsics.isa(mask, Series) and intrinsics.isa(colname, str):
+                existing = self._df._table.get_column(colname)
+                new_col = existing.element_wise(mask._data, lambda old, m: value if m else old)
+                version = self._df._col_versions[colname]
+                self._df._col_versions[colname] = version + 1
+                self._df._table = self._df._table.set_column(colname, new_col)
+            else:
+                intrinsics.not_implemented()
+        else:
+            intrinsics.not_implemented()
+
+    def __hipy_get_type__(self) -> Type:
+        return _NotRelevantType()
+
+    @staticmethod
+    def __hipy_create_type__() -> Type:
+        return _NotRelevantType()
+
+    @hipy.compiled_function
+    def __topython__(self):
+        return intrinsics.to_python(self._df).loc
+
+
 
 @hipy.classdef
 class DataFrameGroupBySeriesGroupBy(static_object["df","by","colname"]):
@@ -430,6 +465,7 @@ class DataFrame(Value):
                                          [_context.wrap(TypeValue(t)) for c, t in column_types])
         res = _context.wrap(DataFrame(table, index, col_versions, col_types))
         res.value.iloc = _context.wrap(_iLocDFIndexer(res))
+        res.value.loc = _context.wrap(_LocDFIndexer(res))
         return res
 
     class DFType(Type):
@@ -659,7 +695,17 @@ class DataFrame(Value):
                     new_table = self._table.set_column(key, value._data)
                     self._table = new_table
             else:
-                intrinsics.not_implemented()
+                # Scalar: broadcast `value` across every row of the frame by
+                # applying a constant lambda to an arbitrary existing column.
+                first_col_name = list(self._col_versions)[0]
+                first_col = self._table.get_column(first_col_name)
+                new_col = first_col.apply(lambda _x: value)
+                if key in self._col_versions:
+                    self._col_versions[key] = self._col_versions[key] + 1
+                else:
+                    self._col_versions[key] = 0
+                    self._col_types[key] = intrinsics.typeof(value)
+                self._table = self._table.set_column(key, new_col)
         else:
             intrinsics.not_implemented()
 
@@ -1308,6 +1354,10 @@ class Series(Value):
     def fillna(self, value):
         if intrinsics.isa(value, self._element_type):
             return self.apply(lambda x: value if np.isnan(np.float64(x)) else x)
+        elif (self._element_type == float or self._element_type == np.float64) and intrinsics.isa(value, int):
+            # pandas widens an int fill value to match a float column.
+            v = float(value)
+            return self.apply(lambda x: v if np.isnan(np.float64(x)) else x)
         else:
             intrinsics.not_implemented()
 
@@ -1369,6 +1419,29 @@ class Timestamp(Value):
 def to_datetime(s):
     if intrinsics.isa(s, Series):
         return s.apply(lambda x: Timestamp(x))
+    else:
+        intrinsics.not_implemented()
+
+
+@hipy.compiled_function
+def to_numeric(arg, errors='raise', downcast=None):
+    # https://pandas.pydata.org/docs/reference/api/pandas.to_numeric.html
+    # Minimal pass-through: if the input is already a numeric Series or
+    # scalar, return it unchanged. String parsing with errors='coerce' is
+    # not yet modelled — the common idiom `pd.to_numeric(col,
+    # errors='coerce').fillna(0)` on an already-numeric column collapses
+    # to a no-op, which is what the QURE map UDFs need.
+    intrinsics.only_implemented_if(downcast is None)
+    if intrinsics.isa(arg, Series):
+        et = arg._element_type
+        if et == float or et == int or et == np.float64 or et == np.int64:
+            return arg
+        else:
+            intrinsics.not_implemented()
+    elif intrinsics.isa(arg, float) or intrinsics.isa(arg, int):
+        return arg
+    elif intrinsics.isa(arg, np.float64) or intrinsics.isa(arg, np.int64):
+        return arg
     else:
         intrinsics.not_implemented()
 

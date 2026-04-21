@@ -108,9 +108,17 @@ def fn_q2():
     print(udf_q2(df))
 
 
-@pytest.mark.xfail(reason="pd.to_numeric is not implemented in the pandas shim")
 def test_q2():
-    check_prints(fn_q2, "")
+    # All four source columns are already floats: pd.to_numeric is a
+    # no-op, fillna(0) keeps them as-is.
+    # discounted = price*(1-discount); total = discounted*(1+tax);
+    # profit = total - price; margin = profit/total.
+    check_prints(fn_q2, """
+   discounted_price  total_cost  profit  profit_margin
+0             900.0       990.0   -10.0      -0.010101
+1            4000.0      4800.0  -200.0      -0.041667
+2           10500.0     13650.0 -1350.0      -0.098901
+""")
 
 
 # ---------------------------------------------------------------------------
@@ -134,9 +142,16 @@ def fn_q3():
     print(udf_q3(df))
 
 
-@pytest.mark.xfail(reason="pd.to_numeric and df.loc row-conditional assignment are not supported")
 def test_q3():
-    check_prints(fn_q3, "")
+    # price1 = price * (1 - discount): 900, 4000, 10500. Starts as 'Error',
+    # gets 'Reasonable Price' where price1 > 0, then 'High Price' where
+    # price1 > 1000 — so rows 1 and 2 end up as 'High Price'.
+    check_prints(fn_q3, """
+   l_extendedprice1  l_discount1   price1       description
+0            1000.0          0.1    900.0  Reasonable Price
+1            5000.0          0.2   4000.0        High Price
+2           15000.0          0.3  10500.0        High Price
+""")
 
 
 # ---------------------------------------------------------------------------
@@ -307,9 +322,14 @@ def fn_q9():
     print(udf_q9(df))
 
 
-@pytest.mark.xfail(reason="pd.to_numeric and df.loc row-conditional assignment are not supported")
 def test_q9():
-    check_prints(fn_q9, "")
+    # Same shape as q3 but with profit-labelled buckets.
+    check_prints(fn_q9, """
+   l_extendedprice1  l_discount1  l_profit l_profitability
+0            1000.0          0.1     900.0          Profit
+1            5000.0          0.2    4000.0     High Profit
+2           15000.0          0.3   10500.0     High Profit
+""")
 
 
 # ---------------------------------------------------------------------------
