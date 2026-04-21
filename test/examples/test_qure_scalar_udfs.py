@@ -62,9 +62,9 @@ def test_q1():
     # row 1: rs=min(15,345)=15, dy=6, res=sqrt(225+36)=sqrt(261)≈16.155494
     # row 2: rs=min(24,336)=24, dy=6, res=sqrt(576+36)=sqrt(612)≈24.738634
     check_prints(fn_q1, """
-8.485281
-16.155494
-24.738634
+8.48528137423857
+16.15549442140351
+24.73863375370596
 """)
 
 
@@ -148,7 +148,7 @@ def test_q4():
     # np.exp(0/50)+10 = 11.0, np.exp(50/50)+10 = e+10 ≈ 12.718282
     check_prints(fn_q4, """
 11.0
-12.718282
+12.718281828459045
 """)
 
 
@@ -289,9 +289,9 @@ def fn_q8():
 
 def test_q8():
     check_prints(fn_q8, """
-2.302585
-9.908475
-11.522876
+2.302585092994046
+9.908475094047168
+11.522875795823397
 """)
 
 
@@ -400,10 +400,10 @@ def fn_q11():
 def test_q11():
     # The single input row has |dfs1-dfs3|=5 > MAX_ANGLE=2 and
     # |dfs2-dfs4|=5 > MAX_ANGLE=2, so the mask is True and the row gets
-    # the sys.float_info.max sentinel. HiPy's C++ backend prints floats
-    # in full decimal rather than scientific notation.
+    # the sys.float_info.max sentinel, which Python prints in scientific
+    # notation.
     check_prints(fn_q11, """
-179769313486231570814527423731704356798070567525844996598917476803157260780028538760589558632766878171540458953514382464234321326889464182768467546703537516986049910576551282076245490090389328944075868508455133942304583236903222948165808559332123348274797826204144723168738177180919299881250404026184124858368.0
+1.7976931348623157e+308
 """)
 
 
@@ -491,12 +491,13 @@ def fn_q14():
 
 
 def test_q14():
-    # np.linspace(0, 1, 4) → [0, 1/3, 2/3, 1]. Those middle values round
-    # through HiPy's 6-digit float_to_string as 0.333333 / 0.666667.
+    # np.linspace(0, 1, 4) → [0, 1/3, 2/3, 1]. Float→str uses Python-
+    # like shortest round-trip, so the middle values print with their
+    # full double precision.
     check_prints(fn_q14, """
 0.0
-0.333333
-0.666667
+0.3333333333333333
+0.6666666666666666
 1.0
 """)
 
@@ -688,10 +689,10 @@ def fn_q19():
 
 def test_q19():
     # mean=2.5, std(ddof=1)=sqrt((1.5²+0.5²+0.5²+1.5²)/3)=sqrt(5/3)≈1.290994
-    # normalized: (-1.5, -0.5, 0.5, 1.5) / 1.290994 ≈ (-1.161895, -0.387298, 0.387298, 1.161895)
+    # normalized: (-1.5, -0.5, 0.5, 1.5) / std.
     check_prints(fn_q19, """
--1.161895
--0.387298
-0.387298
-1.161895
+-1.161895003862225
+-0.3872983346207417
+0.3872983346207417
+1.161895003862225
 """)

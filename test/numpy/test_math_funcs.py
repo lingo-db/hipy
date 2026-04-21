@@ -15,8 +15,8 @@ def fn_sin():
 def test_sin():
     check_prints(fn_sin, """
 0.0
-0.841471
-0.909297
+0.8414709848078965
+0.9092974268256817
 [0.84147098 0.84147098 0.84147098]
 """)
 
@@ -43,7 +43,7 @@ def test_cos_sqrt_exp_log():
 
 @hipy.compiled_function
 def fn_arcsin():
-    # np.arcsin — the arcsin branch of _float_function. Float→str uses 6-digit precision.
+    # np.arcsin — the arcsin branch of _float_function.
     print(np.arcsin(0.0))
     print(np.arcsin(1.0))
 
@@ -51,5 +51,5 @@ def fn_arcsin():
 def test_arcsin():
     check_prints(fn_arcsin, """
 0.0
-1.570796
+1.5707963267948966
 """)

@@ -48,4 +48,4 @@ def fn_crime_index():
 
 
 def test_crime_index():
-    check_prints(fn_crime_index, """0.05""")
+    check_prints(fn_crime_index, """0.049999999999999996""")

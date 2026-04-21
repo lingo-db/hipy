@@ -10,6 +10,7 @@
 #include <fstream>
 #include <format>
 #include <cmath>
+#include <charconv>
 #include<unordered_map>
         #include <regex>
         #include <tuple>
@@ -68,12 +69,19 @@ namespace builtin {
 
     template<class X>
     inline std::string float_to_string(X arg) {
-        std::stringstream ss;
-        ss << std::fixed << std::setprecision(6) << arg;
-        auto result = ss.str();
-        result.erase(result.find_last_not_of('0') + 1, std::string::npos);
-        if (result.back() == '.') {
-            result.push_back('0');
+        // Match Python's str(float): shortest decimal that round-trips
+        // to `arg`. std::to_chars with no precision argument already
+        // produces the shortest round-trip representation; we only need
+        // to append ".0" when the result has no decimal point or
+        // exponent so that a whole-number float prints as "1.0" rather
+        // than "1" (matching Python).
+        char buf[32];
+        auto res = std::to_chars(buf, buf + sizeof(buf), arg);
+        std::string result(buf, res.ptr);
+        if (result.find('.') == std::string::npos &&
+            result.find('e') == std::string::npos &&
+            result.find('n') == std::string::npos) {
+            result += ".0";
         }
         return result;
     }
