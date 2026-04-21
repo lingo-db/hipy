@@ -211,19 +211,16 @@ def fn_q6():
     print(udf_q6(df))
 
 
-@pytest.mark.xfail(reason="reductions (.sum/.mean/.std) on a df-sourced Series "
-                          "currently return a pyobject instead of a scalar, so "
-                          "`col - col.mean()` falls into the pyobject branch of "
-                          "Series._element_wise. The same expression works on a "
-                          "directly-constructed pd.Series.")
 def test_q6():
-    # quantity/discount/tax are [v, 2v, 3v] → standardisation gives [-1, 0, 1]
-    # for each column.
+    # quantity=[10,20,30] lands on exact floats, so its standardisation is
+    # [-1.0, 0.0, 1.0]. discount/tax=[0.1,0.2,0.3] accumulate a double
+    # rounding error of ~2.78e-16 in the mean, so pandas switches to
+    # scientific notation — match pandas' own output.
     check_prints(fn_q6, """
-   l_linenumber  l_quantity1  l_discount1  l_tax1
-0             1         -1.0         -1.0    -1.0
-1             2          0.0          0.0     0.0
-2             3          1.0          1.0     1.0
+   l_linenumber  l_quantity1   l_discount1        l_tax1
+0             1         -1.0 -1.000000e+00 -1.000000e+00
+1             2          0.0 -2.775558e-16 -2.775558e-16
+2             3          1.0  1.000000e+00  1.000000e+00
 """)
 
 
@@ -463,11 +460,6 @@ def fn_q15():
     print(udf_q15(df))
 
 
-@pytest.mark.xfail(reason="reductions (.sum/.mean/.std) on a df-sourced Series "
-                          "currently return a pyobject instead of a scalar, so "
-                          "`col - col.mean()` falls into the pyobject branch of "
-                          "Series._element_wise. The same expression works on a "
-                          "directly-constructed pd.Series.")
 def test_q15():
     # quantity=[10,20,30] → mean=20, std=10 → [-1, 0, 1].
     check_prints(fn_q15, """

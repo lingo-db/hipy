@@ -460,7 +460,13 @@ class DataFrame(Value):
     def __create__(data=None, index=None, columns=None, dtype=None, copy=None):
         intrinsics.only_implemented_if(data is not None, columns is None, dtype is None, copy is None)
         if intrinsics.isa(data, _concrete_dict):
-            columns_dict = {k: column(data[k]) for k in data}
+            columns_dict = {}
+            for k in data:
+                val = data[k]
+                if intrinsics.isa(val, Series):
+                    columns_dict[k] = val._data
+                else:
+                    columns_dict[k] = column(val)
             if index is None:
                 first_column = columns_dict[list(columns_dict)[0]]
                 num_rows = len(first_column)
@@ -477,7 +483,13 @@ class DataFrame(Value):
     @hipy.compiled_function
     def from_dict(data):
         if intrinsics.isa(data, _concrete_dict):
-            columns_dict = {k: column(data[k]) for k in data}
+            columns_dict = {}
+            for k in data:
+                val = data[k]
+                if intrinsics.isa(val, Series):
+                    columns_dict[k] = val._data
+                else:
+                    columns_dict[k] = column(val)
             first_column = columns_dict[list(columns_dict)[0]]
             num_rows = len(first_column)
             index = RangeIndex._create_raw(0, num_rows, 1, column.sequential(num_rows))
@@ -1211,12 +1223,21 @@ class Series(Value):
         if res[0]:
             return res[1]
         else:
+            # Empty column: return a zero whose type matches res[1] so the
+            # if/else branches merge to the element type rather than pyobj.
+            # DataFrame-sourced Series store columns with plain float/int
+            # element types, while directly-constructed Series upgrade to
+            # np.float64/np.int64 — handle both.
             if self._element_type==np.float64:
                 return np.float64(0.0)
             elif self._element_type==np.int64:
                 return np.int64(0)
-            else:
+            elif self._element_type==float:
+                return 0.0
+            elif self._element_type==int:
                 return 0
+            else:
+                return undef
 
     @hipy.compiled_function
     def mean(self):
