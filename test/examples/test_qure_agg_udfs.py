@@ -474,11 +474,13 @@ def fn_q15():
 
 
 def test_q15():
+    # `delay` is a computed series with no name (subtraction of two named
+    # series loses the name), so the groupby result also has no Name line.
     check_prints(fn_q15, """l_orderkey
 1    5.0
 2   -5.0
 3    9.0
-Name: l_shipdate, dtype: float64""")
+dtype: float64""")
 
 
 # ---------------------------------------------------------------------------

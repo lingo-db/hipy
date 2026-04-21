@@ -98,6 +98,8 @@ class int64(Value):
     def __truediv__(self, other):
         if intrinsics.isa(other, int):
             return float(self) / float(other)
+        elif intrinsics.isa(other, int64):
+            return float(self) / float(other)
         else:
             intrinsics.not_implemented()
 
