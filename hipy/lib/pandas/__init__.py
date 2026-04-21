@@ -1245,6 +1245,13 @@ class Series(Value):
         return len(self._data)
 
     @hipy.compiled_function
+    def count(self):
+        # pandas' Series.count() returns the number of non-NA entries.
+        # HiPy doesn't model NaN separately from a plain float column, so
+        # this collapses to len().
+        return len(self._data)
+
+    @hipy.compiled_function
     def __hipy__repr__(self):
         return repr(self.__topython__())
 
