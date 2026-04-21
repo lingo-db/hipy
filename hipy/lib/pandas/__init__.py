@@ -13,6 +13,7 @@ from hipy import intrinsics, ir
 from hipy.lib._tabular import column, table, row as _row
 import hipy.lib.builtins as builtins
 import hipy.lib.math
+from hipy.lib.datetime import timedelta
 from hipy.lib.builtins import _concrete_dict, _const_str, _concrete_list
 from hipy.value import SimpleType, Value, Type, raw_module, ValueHolder, TypeValue, CValue, VoidValue, static_object
 import hipy.lib.numpy
@@ -980,6 +981,9 @@ class _DateMethods(Value):
     def __hipy_getattr__(self, item):
         if item=="year":
             return self._series.apply(lambda x: x.year)
+        elif item=="days":
+            # Series-of-timedelta → Series-of-int(days).
+            return self._series.apply(lambda x: x.days)
         else:
             intrinsics.not_implemented()
 
@@ -1089,6 +1093,8 @@ class Series(Value):
                         return self._data_
                 else:
                     return self._data_
+        elif item == "empty":
+            return len(self._data) == 0
         else:
             intrinsics.not_implemented()
     @hipy.raw
@@ -1320,6 +1326,18 @@ class Series(Value):
         # HiPy doesn't model NaN separately from a plain float column, so
         # this collapses to len().
         return len(self._data)
+
+    @hipy.compiled_function
+    def notnull(self):
+        # pandas' Series.notnull() returns a bool Series flagging
+        # non-NA entries. HiPy doesn't track NaN for typed columns, so
+        # the result is all-True.
+        return self.apply(lambda x: True)
+
+    @hipy.compiled_function
+    def isnull(self):
+        # Complement of notnull(). Always False in HiPy's typed model.
+        return self.apply(lambda x: False)
 
     @hipy.compiled_function
     def __hipy__repr__(self):
@@ -1620,6 +1638,15 @@ class Timestamp(Value):
             return intrinsics.call_builtin("date.get_hour",int,[self])
         elif key=="year":
             return intrinsics.call_builtin("date.get_year",int,[self])
+        else:
+            intrinsics.not_implemented()
+
+    @hipy.compiled_function
+    def __sub__(self, other):
+        if intrinsics.isa(other, Timestamp):
+            # date.diff returns a nanosecond interval — this is exactly
+            # the datetime.timedelta IR representation.
+            return intrinsics.call_builtin("date.diff", timedelta, [self, other], side_effects=False)
         else:
             intrinsics.not_implemented()
 

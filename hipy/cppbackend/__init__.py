@@ -108,6 +108,9 @@ def get_column_builder(t):
                     raise NotImplementedError(f"Float width {w} not implemented")
         case ir.StringType():
             return "builtin::tabular::StrColumnBuilder"
+        case ir.IntervalType():
+            # timedelta values are nanosecond int64s in C++.
+            return "builtin::tabular::Int64ColumnBuilder"
         case ir.ListType(element_type=element_type):
             return f"builtin::tabular::ListColumnBuilder<{get_column_builder(element_type)}>"
         case _:
@@ -140,6 +143,8 @@ def get_column_accessor(t):
                     raise NotImplementedError(f"Float width {w} not implemented")
         case ir.StringType():
             return "builtin::tabular::StrColumnAccessor"
+        case ir.IntervalType():
+            return "builtin::tabular::Int64ColumnAccessor"
         case ir.ListType(element_type=element_type):
             return f"builtin::tabular::ListColumnAccessor<{get_column_accessor(element_type)}>"
         case _:
