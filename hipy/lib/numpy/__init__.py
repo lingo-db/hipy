@@ -416,8 +416,43 @@ def abs(x):
         return _array_apply_scalar(x, lambda v: builtins.abs(v))
     elif intrinsics.isa(x, hipy.lib.pandas.Series):
         return x.abs()
+    elif intrinsics.isa(x, float64):
+        return x if x >= float64(0.0) else -x
+    elif intrinsics.isa(x, int64):
+        return x if x >= int64(0) else -x
     else:
         return builtins.abs(x)
+
+
+@hipy.compiled_function
+def absolute(x):
+    # https://numpy.org/doc/stable/reference/generated/numpy.absolute.html
+    # Alias of numpy.abs.
+    return abs(x)
+
+
+@hipy.compiled_function
+def diff(a, n=1):
+    # https://numpy.org/doc/stable/reference/generated/numpy.diff.html
+    # First-order differences along axis 0. Accepts anything iterable
+    # (list, pandas Series). Returned as a Python list of the element
+    # type's subtraction result.
+    intrinsics.only_implemented_if(n == 1)
+    vals = [v for v in a]
+    return [vals[i + 1] - vals[i] for i in range(len(vals) - 1)]
+
+
+@hipy.compiled_function
+def std(a, ddof=0):
+    # https://numpy.org/doc/stable/reference/generated/numpy.std.html
+    # Population std by default (ddof=0), matching numpy's convention.
+    if intrinsics.isa(a, hipy.lib.pandas.Series):
+        return a.std(ddof=ddof)
+    vals = [float(v) for v in a]
+    n = len(vals)
+    m = builtins.sum(vals) / float(n)
+    sq = builtins.sum([(v - m) ** 2.0 for v in vals])
+    return sqrt(sq / float(n - ddof))
 
 
 @hipy.compiled_function

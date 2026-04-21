@@ -1245,6 +1245,45 @@ class Series(Value):
         return float(self.sum()) / float(len(self))
 
     @hipy.compiled_function
+    def min(self):
+        # Seed the fold with the maximum representable value of the
+        # element-type's domain so the accumulator type matches and we
+        # avoid the (valid, value) tuple dance Series.sum uses.
+        if self._element_type == float:
+            init = 1.7976931348623157e308
+        elif self._element_type == int:
+            init = 9223372036854775807
+        elif self._element_type == np.float64:
+            init = np.float64(1.7976931348623157e308)
+        elif self._element_type == np.int64:
+            init = np.int64(9223372036854775807)
+        else:
+            intrinsics.not_implemented()
+        return self._data.aggregate(
+            init,
+            lambda a, b: a if a < b else b,
+            lambda a, b: a if a < b else b,
+        )
+
+    @hipy.compiled_function
+    def max(self):
+        if self._element_type == float:
+            init = -1.7976931348623157e308
+        elif self._element_type == int:
+            init = -9223372036854775808
+        elif self._element_type == np.float64:
+            init = np.float64(-1.7976931348623157e308)
+        elif self._element_type == np.int64:
+            init = np.int64(-9223372036854775808)
+        else:
+            intrinsics.not_implemented()
+        return self._data.aggregate(
+            init,
+            lambda a, b: a if a > b else b,
+            lambda a, b: a if a > b else b,
+        )
+
+    @hipy.compiled_function
     def quantile(self, q):
         # Linear interpolation, matching pandas' default.
         values = sorted([float(v) for v in self])

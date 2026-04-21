@@ -159,9 +159,13 @@ def fn_q4():
     print(udf_q4(df))
 
 
-@pytest.mark.xfail(reason="np.diff / np.std / np.absolute are not implemented in the numpy shim")
 def test_q4():
-    check_prints(fn_q4, "")
+    # quantity=[10,20,30] → diff=[10,10] → diff-of-diff=[0].
+    # stddev(diff)=0, stddev(diff-of-diff)=0 → variation=sqrt(|0-0|)=0.
+    check_prints(fn_q4, """
+   l_value
+0      0.0
+""")
 
 
 # ---------------------------------------------------------------------------
@@ -436,9 +440,14 @@ def fn_q14():
     print(udf_q14(df))
 
 
-@pytest.mark.xfail(reason="Series.min / Series.max are not implemented in the pandas shim")
 def test_q14():
-    check_prints(fn_q14, "")
+    # quantity=[10,20,30] → (value-10)/20 → [0.0, 0.5, 1.0].
+    check_prints(fn_q14, """
+   scaled_quantity
+0              0.0
+1              0.5
+2              1.0
+""")
 
 
 # ---------------------------------------------------------------------------
