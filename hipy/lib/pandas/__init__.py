@@ -185,6 +185,11 @@ class MultiIndex(Value):
         # pandas 3.x's MultiIndex() constructor no longer accepts the
         # positional arrays form nor the `dtype=` kwarg. Use from_arrays,
         # which takes a list of arrays plus `names`.
+        # Collapse a one-level MultiIndex to a regular Index so the
+        # Series / DataFrame that carries it prints with pandas' usual
+        # single-index layout instead of the wider MultiIndex form.
+        if len(self._cols) == 1:
+            return pd.Index(self._cols[0], name=self.names[0])
         return pd.MultiIndex.from_arrays(self._cols, names=self.names)
 
     @hipy.compiled_function
@@ -422,6 +427,18 @@ class DataFrameGroupBySeriesGroupBy(static_object["df","by","colname"]):
         raw_res=distinct_table.aggregate(self.by,[(self.colname, self.colname, 0, lambda x,y : x+1, lambda x:x)])
         index = MultiIndex([raw_res.get_column(k) for k in self.by], self.by)
         return Series._create_raw(raw_res.get_column(self.colname), index, name=self.colname)
+
+    @hipy.compiled_function
+    def sum(self):
+        # Delegate to DataFrameGroupBy.agg so the init_val / accumulator
+        # choice stays consistent between Series and DataFrame groupby.
+        agg_df = DataFrameGroupBy(self.df, self.by).agg({self.colname: "sum"})
+        return agg_df[self.colname]
+
+    @hipy.compiled_function
+    def mean(self):
+        agg_df = DataFrameGroupBy(self.df, self.by).agg({self.colname: "mean"})
+        return agg_df[self.colname]
 
 
 
@@ -1008,6 +1025,40 @@ class _iLocSeriesIndexer(Value):
 
 
 @hipy.classdef
+class _SeriesGroupBy(static_object["_inner", "_output_name"]):
+    # Wrapper around DataFrameGroupBySeriesGroupBy for the Series.groupby
+    # path. Restores the output Series' name after aggregation so that an
+    # unnamed input produces an unnamed result (matching pandas).
+    def __init__(self, inner, output_name):
+        super().__init__(lambda args: _SeriesGroupBy(*args), inner, output_name)
+
+    @staticmethod
+    @hipy.raw
+    def __create__(inner, output_name, _context):
+        return _context.wrap(_SeriesGroupBy(inner, output_name))
+
+    @hipy.compiled_function
+    def __topython__(self):
+        return intrinsics.to_python(self._inner)
+
+    @hipy.compiled_function
+    def _rename(self, s):
+        return Series._create_raw(s._data, s.index, name=self._output_name)
+
+    @hipy.compiled_function
+    def sum(self):
+        return self._rename(self._inner.sum())
+
+    @hipy.compiled_function
+    def mean(self):
+        return self._rename(self._inner.mean())
+
+    @hipy.compiled_function
+    def nunique(self):
+        return self._rename(self._inner.nunique())
+
+
+@hipy.classdef
 class Series(Value):
     def __init__(self, index, data_column=None, df=None, name=None, version=None, concrete_values=None):
         super().__init__(None)
@@ -1220,6 +1271,25 @@ class Series(Value):
         # UDFs that were copy-pasted from DataFrame.apply call sites.
         res_col = self._data.apply(lambda x: _to_native_type(fn(_to_python_type(x))))
         return Series._create_raw(res_col, self.index)
+
+    @hipy.compiled_function
+    def groupby(self, by):
+        # Support the `series.groupby(other_series).agg(...)` idiom by
+        # building a synthetic two-column frame and reusing the
+        # DataFrame groupby-single-column path. The wrapper restores the
+        # original Series name (which may be None) on the aggregated
+        # result, so the output matches pandas' own (where e.g. an
+        # unnamed `margin` series yields an unnamed groupby result).
+        if intrinsics.isa(by, Series):
+            val_name = "__hipy_groupby_value__"
+            key_name = by.name
+            if key_name is None:
+                key_name = "__hipy_groupby_key__"
+            synth = DataFrame({val_name: self, key_name: by})
+            inner = DataFrameGroupBySeriesGroupBy(synth, [key_name], val_name)
+            return _SeriesGroupBy(inner, self.name)
+        else:
+            intrinsics.not_implemented()
 
     @hipy.compiled_function
     def __neg__(self):

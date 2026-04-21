@@ -310,11 +310,13 @@ def fn_q9():
 
 
 def test_q9():
+    # `margin` is a computed series with no name, so the groupby result
+    # also has no Name line (matching pandas).
     check_prints(fn_q9, """l_orderkey
 1    94.444444
 2    97.500000
 3    98.095238
-Name: l_extendedprice, dtype: float64""")
+dtype: float64""")
 
 
 # ---------------------------------------------------------------------------
