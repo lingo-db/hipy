@@ -1340,6 +1340,17 @@ class Series(Value):
         return self.apply(lambda x: False)
 
     @hipy.compiled_function
+    def all(self):
+        # True iff every element is truthy. Folds via the column's
+        # aggregate primitive, seeded with True.
+        return self._data.aggregate(True, lambda a, b: a and bool(b), lambda a, b: a and b)
+
+    @hipy.compiled_function
+    def any(self):
+        # True iff any element is truthy.
+        return self._data.aggregate(False, lambda a, b: a or bool(b), lambda a, b: a or b)
+
+    @hipy.compiled_function
     def __hipy__repr__(self):
         return repr(self.__topython__())
 
@@ -1450,11 +1461,30 @@ class Series(Value):
     @hipy.compiled_function
     def _minmax_combine(left, right, take_left):
         if left[0] and right[0]:
-            return (True, left[1] if take_left(left[1], right[1]) else right[1])
+            if take_left(left[1], right[1]):
+                return (True, left[1])
+            else:
+                return (True, right[1])
         elif left[0]:
             return left
         else:
             return right
+
+    @staticmethod
+    @hipy.compiled_function
+    def _minmax_step(acc, b, is_lt):
+        # Fold step for min/max over an element type where there is no
+        # natural seed value (e.g. strings, Timestamps). Uses an explicit
+        # if/else rather than a conditional expression because a Python
+        # lambda's `x if cond else y` loses element-type info through
+        # the lambda-binding path and widens the merge to pyobj.
+        if acc[0]:
+            if is_lt(acc[1], b):
+                return (True, acc[1])
+            else:
+                return (True, b)
+        else:
+            return (True, b)
 
     @hipy.compiled_function
     def min(self):
@@ -1490,7 +1520,7 @@ class Series(Value):
             undef = intrinsics.undef(self._element_type)
             res = self._data.aggregate(
                 (False, undef),
-                lambda a, b: (True, a[1] if a[1] < b else b) if a[0] else (True, b),
+                lambda a, b: Series._minmax_step(a, b, lambda x, y: x < y),
                 lambda l, r: Series._minmax_combine(l, r, lambda x, y: x < y),
             )
             if res[0]:
@@ -1528,7 +1558,7 @@ class Series(Value):
             undef = intrinsics.undef(self._element_type)
             res = self._data.aggregate(
                 (False, undef),
-                lambda a, b: (True, a[1] if a[1] > b else b) if a[0] else (True, b),
+                lambda a, b: Series._minmax_step(a, b, lambda x, y: x > y),
                 lambda l, r: Series._minmax_combine(l, r, lambda x, y: x > y),
             )
             if res[0]:
@@ -1649,6 +1679,49 @@ class Timestamp(Value):
             return intrinsics.call_builtin("date.diff", timedelta, [self, other], side_effects=False)
         else:
             intrinsics.not_implemented()
+
+    @hipy.compiled_function
+    def _cmp(self, op, other):
+        # Comparisons delegate to the shared date.compare.* builtins
+        # since Timestamp and datetime.date share the same i64 layout.
+        if intrinsics.isa(other, Timestamp):
+            return intrinsics.call_builtin("date.compare." + op, bool, [self, other], side_effects=False)
+        else:
+            intrinsics.not_implemented()
+
+    @hipy.compiled_function
+    def __eq__(self, other):
+        return self._cmp("eq", other)
+
+    @hipy.compiled_function
+    def __ne__(self, other):
+        return self._cmp("neq", other)
+
+    @hipy.compiled_function
+    def __lt__(self, other):
+        return self._cmp("lt", other)
+
+    @hipy.compiled_function
+    def __le__(self, other):
+        return self._cmp("lte", other)
+
+    @hipy.compiled_function
+    def __gt__(self, other):
+        return self._cmp("gt", other)
+
+    @hipy.compiled_function
+    def __ge__(self, other):
+        return self._cmp("gte", other)
+
+    @staticmethod
+    def __merge__(self, other, self_fn, other_fn, context):
+        # Without this, `if cond: t1 else: t2` where both branches
+        # produce Timestamps falls back to the context.merge generic
+        # Python-object path, widening the result to pyobj.
+        if isinstance(other.value, Timestamp):
+            return self, other, lambda val: Timestamp(val)
+        else:
+            raise NotImplementedError()
 
 
 @hipy.compiled_function
