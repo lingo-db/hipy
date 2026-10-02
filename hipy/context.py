@@ -329,6 +329,10 @@ class Context:
                         return self.wrap(PythonModule(val))
                     else:
                         val_module=val.__module__
+                        if val_module is None and hasattr(val, "__self__"):
+                            # a bound method has no module, e.g. `from random import random` (a method of the
+                            # random module's hidden Random instance): use the module of its instance's class
+                            val_module = type(val.__self__).__module__
                         if val_module in hipy.mocked_modules:
                             return self.get_attr(self.wrap(PythonModule(sys.modules[val_module])),name)
                         val_name= val.__name__ if hasattr(val, "__name__") else name
