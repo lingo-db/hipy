@@ -186,6 +186,14 @@ def to_mlir_stmt(stmt, mapping):
                     mapping[r] = arith.ShLIOp(mapping[args[0]], mapping[args[1]]).result
                 case "scalar.int.lshift", [ir.IntType(), ir.IntType()]:
                     mapping[r] = arith.ShLIOp(mapping[args[0]], mapping[args[1]]).result
+                case "scalar.int.and", [ir.IntegerType(), ir.IntegerType()]:
+                    mapping[r] = arith.AndIOp(mapping[args[0]], mapping[args[1]]).result
+                case "scalar.int.and", [ir.IntType(), ir.IntType()]:
+                    mapping[r] = arith.AndIOp(mapping[args[0]], mapping[args[1]]).result
+                case "scalar.int.xor", [ir.IntegerType(), ir.IntegerType()]:
+                    mapping[r] = arith.XOrIOp(mapping[args[0]], mapping[args[1]]).result
+                case "scalar.int.xor", [ir.IntType(), ir.IntType()]:
+                    mapping[r] = arith.XOrIOp(mapping[args[0]], mapping[args[1]]).result
                 case "scalar.int.compare.eq", [ir.IntegerType(), ir.IntegerType()]:
                     mapping[r] = arith.CmpIOp(arith.CmpIPredicate.eq, mapping[args[0]], mapping[args[1]]).result
                 case "scalar.int.compare.eq", [ir.IntType(), ir.IntType()]:
