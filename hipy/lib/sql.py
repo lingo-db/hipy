@@ -73,3 +73,12 @@ def nullable(element_type):
     return intrinsics.create_type(Nullable, element_type)
 
 
+@hipy.compiled_function
+def row(*element_types):
+    """Type of a row-valued sql.execute: a tuple with one element per result
+    column, e.g. sql.row(str, sql.nullable(int)): the values of the query's
+    first row (an arbitrary one if there are several). If the query yields no
+    row, the query fails with a runtime error."""
+    return intrinsics.create_type(tuple, [t for t in element_types])
+
+
