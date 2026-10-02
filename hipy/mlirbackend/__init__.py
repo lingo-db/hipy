@@ -504,8 +504,13 @@ def to_mlir_stmt(stmt, mapping):
                     mapping[r] = db.RuntimeCall(to_mlir_type(r.type), str_attr("ATan2"),
                                                 [mapping[args[0]], mapping[args[1]]]).result
                 case "scalar.float.round", [ir.FloatType(), ir.IntType()]:
-                    mapping[r] = db.RuntimeCall(to_mlir_type(r.type), str_attr("RoundFloat"),
-                                                [mapping[args[0]], mapping[args[1]]]).result
+                    # RoundFloat: (f64, int) -> f64 (half to even, like Python); round(x) returns an int
+                    rounded = db.RuntimeCall(mlirtypes.f64(), str_attr("RoundFloat"),
+                                             [mapping[args[0]], mapping[args[1]]]).result
+                    if isinstance(r.type, ir.IntType):
+                        mapping[r] = arith.FPToSIOp(to_mlir_type(r.type), rounded).result
+                    else:
+                        mapping[r] = rounded
                 case "scalar.float.to_python", [ir.FloatType()]:
                     mapping[r] = py_interp.CastToPyObject(to_mlir_type(r.type), mapping[args[0]]).result
                 case "scalar.float.to_string", [ir.FloatType()]:
