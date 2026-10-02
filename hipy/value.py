@@ -261,8 +261,23 @@ class VoidValue(Value):
         if isinstance(other.value, VoidValue):
             # todo: optimization potential
             return self, other, lambda val: VoidValue(val)
-        else:
+        # None and a scalar (e.g. `return None` in one branch, `return 1` in
+        # the other) -> sql.nullable(T); a nullable merges itself
+        # (Nullable.__merge__)
+        from hipy.lib.sql import Nullable
+        if isinstance(other.value, Nullable):
             raise NotImplementedError()
+        try:
+            other_type = other.value.__hipy_get_type__()
+        except (NotImplementedError, AttributeError):
+            raise NotImplementedError()
+        if not isinstance(other_type, SimpleType) or not isinstance(other_type.ir_type(), (
+                ir.IntType, ir.FloatType, ir.StringType, ir.BoolType)):
+            raise NotImplementedError()
+        nullable_type = Nullable.NullableType(other_type)
+        null = self_fn(lambda c: c.wrap(c.call_builtin("nullable.null", nullable_type, [])))
+        not_null = other_fn(lambda c: c.wrap(c.call_builtin("nullable.make", nullable_type, [other])))
+        return null, not_null, lambda val: Nullable(val, other_type)
 
     class VoidType(Type):
         def ir_type(self):

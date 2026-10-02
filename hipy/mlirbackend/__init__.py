@@ -547,6 +547,10 @@ def to_mlir_stmt(stmt, mapping):
                     mapping[r] = db.IsNullOp(mapping[args[0]]).result
                 case "nullable.get_value", [ir.NullableType()]:
                     mapping[r] = db.NullableGetVal(mapping[args[0]]).result
+                case "nullable.null", []:
+                    mapping[r] = db.NullOp(to_mlir_type(r.type)).result
+                case "nullable.make", [_]:
+                    mapping[r] = db.AsNullableOp(to_mlir_type(r.type), mapping[args[0]]).result
                 case "list.sort" , [ir.ListType(), ir.FunctionRefType()]:
                     match args[1].producer:
                         case ir.FunctionRef(name=func_name):

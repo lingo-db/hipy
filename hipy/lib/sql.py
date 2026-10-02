@@ -24,6 +24,26 @@ class Nullable(Value):
     def __topython__(self):
         return intrinsics.not_implemented()
 
+    @staticmethod
+    def __merge__(self, other, self_fn, other_fn, context):
+        from hipy.value import VoidValue
+        element_type = self.value.element_type
+        nullable_type = Nullable.NullableType(element_type)
+        construct = lambda val: Nullable(val, element_type)
+        if isinstance(other.value, Nullable):
+            if other.value.element_type != element_type:
+                raise NotImplementedError()
+            return self, other, construct
+        if isinstance(other.value, VoidValue):
+            return self, other_fn(lambda c: c.wrap(c.call_builtin("nullable.null", nullable_type, []))), construct
+        try:
+            other_type = other.value.__hipy_get_type__()
+        except (NotImplementedError, AttributeError):
+            raise NotImplementedError()
+        if other_type != element_type:
+            raise NotImplementedError()
+        return self, other_fn(lambda c: c.wrap(c.call_builtin("nullable.make", nullable_type, [other]))), construct
+
     @hipy.compiled_function
     def is_null(self):
         return intrinsics.call_builtin("nullable.is_null", bool, [self])
