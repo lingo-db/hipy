@@ -503,6 +503,8 @@ def to_mlir_stmt(stmt, mapping):
                 case "scalar.float.atan2", [ir.FloatType(), ir.FloatType()]:
                     mapping[r] = db.RuntimeCall(to_mlir_type(r.type), str_attr("ATan2"),
                                                 [mapping[args[0]], mapping[args[1]]]).result
+                case "random.random", []:
+                    mapping[r] = db.RuntimeCall(to_mlir_type(r.type), str_attr("Random"), []).result
                 case "scalar.float.copysign", [ir.FloatType(), ir.FloatType()]:
                     # magnitude bits of x, sign bit of y (also for -0.0, inf and nan, like C's copysign)
                     i64 = mlirtypes.i64()
