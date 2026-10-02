@@ -546,6 +546,13 @@ def to_mlir_stmt(stmt, mapping):
                 case "nullable.is_null", [ir.NullableType()]:
                     mapping[r] = db.IsNullOp(mapping[args[0]]).result
                 case "nullable.get_value", [ir.NullableType()]:
+                    # NULL is a runtime error (instead of an undefined value)
+                    is_null = db.IsNullOp(mapping[args[0]]).result
+                    if_op = scf.IfOp(is_null, [], hasElse=False)
+                    with mlir.InsertionPoint(if_op.then_block):
+                        message = db.ConstantOp(db.StringType.get(curr_context), str_attr("get_value() on NULL")).result
+                        db.RuntimeCall(None, str_attr("RaiseError"), [message])
+                        scf.YieldOp([])
                     mapping[r] = db.NullableGetVal(mapping[args[0]]).result
                 case "nullable.null", []:
                     mapping[r] = db.NullOp(to_mlir_type(r.type)).result
