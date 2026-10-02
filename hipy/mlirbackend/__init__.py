@@ -390,8 +390,8 @@ def to_mlir_stmt(stmt, mapping):
                                                          mlir.FlatSymbolRefAttr.get(func_name)).result
                         case _:
                             assert False, "Dict creation with closure type not supported"
-                case "dict.iter_items", [ir.FunctionRefType(), ir.RecordType(), ir.RecordType(), \
-                                         ir.DictType(key_type=key_type, val_type=val_type)]:
+                case "dict.iter_items" | "dict.iter_keys", [ir.FunctionRefType(), ir.RecordType(), ir.RecordType(), \
+                                                            ir.DictType(key_type=key_type, val_type=val_type)]:
                     iter = db.DictGetIter(db.DictIterType.get(to_mlir_type(key_type), to_mlir_type(val_type)),
                                           mapping[args[3]]).result
                     whileOp = scf.WhileOp([mapping[args[2]].type], [mapping[args[2]]])
@@ -406,19 +406,25 @@ def to_mlir_stmt(stmt, mapping):
                     with mlir.InsertionPoint(afterBlock):
                         key = db.DictIterGetKey(to_mlir_type(key_type), iter).result
                         value = db.DictIterGetValue(to_mlir_type(val_type), iter).result
-                        packed = util.PackOp(mlirtypes.TupleType.get_tuple([key.type, value.type]), [key, value]).result
-                        next_iter_val = call(args[0], [mapping[args[1]], iterArgAfter, packed], mapping)
+                        if name == "dict.iter_keys":
+                            element = key
+                        else:
+                            element = util.PackOp(mlirtypes.TupleType.get_tuple([key.type, value.type]), [key, value]).result
+                        next_iter_val = call(args[0], [mapping[args[1]], iterArgAfter, element], mapping)
                         db.DictIterNext(iter)
                         scf.YieldOp([next_iter_val])
                     mapping[r] = whileOp.results[0]
+                case "dict.length", [ir.DictType()]:
+                    length_as_index = db.DictLengthOp(mapping[args[0]]).result
+                    mapping[r] = arith.IndexCastOp(mlirtypes.i64(), length_as_index).result
                 case "dict.contains", [ir.DictType(), key_type]:
-                    hashed = db.Hash(mapping[args[1]]).result
+                    hashed = db.Hash([mapping[args[1]]]).result
                     mapping[r] = db.DictContainsOp(mapping[args[0]], mapping[args[1]], hashed).result
                 case "dict.get", [ir.DictType(), key_type]:
-                    hashed = db.Hash(mapping[args[1]]).result
+                    hashed = db.Hash([mapping[args[1]]]).result
                     mapping[r] = db.DictGetOp(to_mlir_type(r.type), mapping[args[0]], mapping[args[1]], hashed).result
                 case "dict.set", [ir.DictType(), key_type, val_type]:
-                    hashed = db.Hash(mapping[args[1]]).result
+                    hashed = db.Hash([mapping[args[1]]]).result
                     db.DictSetOp(mapping[args[0]], mapping[args[1]], hashed, mapping[args[2]])
                 case "scalar.float.from_int", [ir.IntType()]:
                     mapping[r] = arith.SIToFPOp(to_mlir_type(r.type), mapping[args[0]]).result
