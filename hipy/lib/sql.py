@@ -29,6 +29,11 @@ class Nullable(Value):
         return intrinsics.call_builtin("nullable.is_null", bool, [self])
 
     @hipy.compiled_function
+    def __is_none__(self):
+        # `x is None` / `x is not None`
+        return self.is_null()
+
+    @hipy.compiled_function
     def get_value(self):
         return intrinsics.call_builtin("nullable.get_value", self.element_type, [self])
 

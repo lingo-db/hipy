@@ -440,6 +440,11 @@ class Context:
                     raise NotImplementedError()
                 case (lib.builtins.object(), VoidValue()):
                     raise NotImplementedError()
+                case (l, VoidValue()) if hasattr(l, "__is_none__"):
+                    # values that can be None at runtime (e.g. sql.nullable)
+                    return self.perform_call(self.get_attr(left, "__is_none__"), [])
+                case (VoidValue(), r) if hasattr(r, "__is_none__"):
+                    return self.perform_call(self.get_attr(right, "__is_none__"), [])
                 case (_, VoidValue()):
                     return self.constant(False)
                 case (VoidValue(), _):
