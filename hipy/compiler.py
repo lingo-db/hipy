@@ -373,17 +373,21 @@ def stage_expr(expr, context: StageContext):
                                                                        col_offset=col_offset)
                                       }, lineno, col_offset, context)
         case ast.BoolOp(op=op, values=[l, r], lineno=lineno, col_offset=col_offset):
+            # short-circuit like Python: the right operand is only evaluated if
+            # needed (it may e.g. run a nested query or fail on NULL); the
+            # result is a bool, as before (`bool(r) if l else False` /
+            # `True if l else bool(r)`)
+            def const(v):
+                return ast.Constant(value=v, lineno=lineno, col_offset=col_offset)
+            r_bool = ast.Call(func=ast.Name(id="bool", ctx=ast.Load(), lineno=lineno, col_offset=col_offset),
+                              args=[r], keywords=[], lineno=lineno, col_offset=col_offset)
             match op:
                 case ast.And():
-                    return stage_context_call("bool_and", {
-                        "left": stage_expr(l, context),
-                        "right": stage_expr(r, context)
-                    }, lineno, col_offset, context)
+                    return stage_expr(ast.IfExp(test=l, body=r_bool, orelse=const(False), lineno=lineno,
+                                                col_offset=col_offset), context)
                 case ast.Or():
-                    return stage_context_call("bool_or", {
-                        "left": stage_expr(l, context),
-                        "right": stage_expr(r, context)
-                    }, lineno, col_offset, context)
+                    return stage_expr(ast.IfExp(test=l, body=const(True), orelse=r_bool, lineno=lineno,
+                                                col_offset=col_offset), context)
                 case _:
                     raise NotImplementedError()
         case ast.BoolOp(op=op, values=values, lineno=lineno, col_offset=col_offset):
