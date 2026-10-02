@@ -595,6 +595,8 @@ def to_mlir_stmt(stmt, mapping):
                 assert False
         case ir.PyImport(result=r, name=module_name):
             mapping[r] = py_interp.ImportOp(to_mlir_type(r.type), str_attr(module_name)).result
+        case ir.Undef(result=r):
+            mapping[r] = util.UndefOp(to_mlir_type(r.type)).result
         case _:
             print(stmt)
             assert False

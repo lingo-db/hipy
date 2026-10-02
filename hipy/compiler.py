@@ -314,6 +314,9 @@ def stage_expr(expr, context: StageContext):
             return stage_context_call("get_item",
                                       {"val": stage_expr(value, context), "item": stage_expr(slice, context)},
                                       lineno, col_offset, context)
+        case ast.Name(lineno=lineno, col_offset=col_offset, id="__hipy_undefined__"):
+            # placeholder introduced by rewrite_loop_return
+            return stage_context_call("undefined", {}, lineno, col_offset, context)
         case ast.Name(lineno=lineno, col_offset=col_offset, id=id):
             if id in context.current_functions:
                 return stage_context_call("get_recursive_raw", {
@@ -1151,18 +1154,199 @@ def flatten(l):
 
 
 def rewrite_continue_in_loop_body(body):
-    res_body = []
-    for stmt in reversed(body):
-        match stmt:
-            case ast.If(test=test, body=ifBody, orelse=elseBody, lineno=lineno, col_offset=col_offset):
-                if isinstance(ifBody[-1], ast.Continue):
-                    res_body = [
-                        ast.If(test=test, body=ifBody[:-1], orelse=elseBody+res_body, lineno=lineno, col_offset=col_offset)]
-                else:
-                    res_body = [stmt] + res_body
+    """Eliminate `continue` statements from a loop body: the statements
+    following an `if` whose branches contain a `continue` (at any nesting
+    depth of ifs, e.g. in an elif chain) are moved into its branches, and
+    everything following a `continue` in a branch is dropped."""
+
+    class FindContinue(ast.NodeVisitor):
+        def __init__(self):
+            self.found = False
+
+        def visit_Continue(self, node):
+            self.found = True
+
+        # continues of nested loops / functions belong to those
+        def visit_For(self, node):
+            pass
+
+        def visit_While(self, node):
+            pass
+
+        def visit_FunctionDef(self, node):
+            pass
+
+        def visit_Lambda(self, node):
+            pass
+
+    def contains_continue(stmt):
+        finder = FindContinue()
+        finder.visit(stmt)
+        return finder.found
+
+    def non_empty(stmts, lineno, col_offset):
+        return stmts if stmts else [ast.Pass(lineno=lineno, col_offset=col_offset)]
+
+    def seq(stmts, rest):
+        # statements equivalent to `stmts` followed by `rest`, where a
+        # `continue` skips the remaining statements
+        if not stmts:
+            return rest
+        first, tail = stmts[0], stmts[1:]
+        match first:
+            case ast.Continue():
+                return []
+            case ast.If(test=test, body=if_body, orelse=else_body, lineno=lineno, col_offset=col_offset) \
+                if contains_continue(first):
+                cont = seq(tail, rest)
+                return [ast.If(test=test, body=non_empty(seq(if_body, cont), lineno, col_offset),
+                               orelse=seq(else_body, cont), lineno=lineno, col_offset=col_offset)]
             case _:
-                res_body = [stmt] + res_body
-    return res_body
+                return [first] + seq(tail, rest)
+
+    return seq(body, [])
+
+
+def rewrite_loop_return(body):
+    """Rewrite `return v` inside a loop body into
+
+        __loop_ret_val_N = v; __loop_ret_flag_N = True; break
+
+    with `__loop_ret_flag_N = False; __loop_ret_val_N = <undefined>` before the
+    loop and `if __loop_ret_flag_N: return __loop_ret_val_N` after it. The
+    value slot starts out undefined (its type is only known once the loop body
+    is staged) and takes the type of the returned value (see
+    value.UndefinedValue). Inner loops are rewritten first, so a return in a
+    nested loop propagates outwards loop by loop. The `break`s and the `if ...:
+    return` after an outermost loop are handled by rewrite_loop_break and
+    rewrite_if_return, i.e. outermost loops containing a return must be at the
+    top level of the function body."""
+    counter = 0
+
+    def name(id, lineno, col_offset, store=False):
+        return ast.Name(id=id, ctx=ast.Store() if store else ast.Load(), lineno=lineno, col_offset=col_offset)
+
+    def assign(target, value, lineno, col_offset):
+        return ast.Assign(targets=[name(target, lineno, col_offset, store=True)], value=value, lineno=lineno,
+                          col_offset=col_offset)
+
+    class SkipNestedScopes(ast.NodeTransformer):
+        def visit_FunctionDef(self, node):
+            return node
+
+        def visit_AsyncFunctionDef(self, node):
+            return node
+
+        def visit_Lambda(self, node):
+            return node
+
+        def visit_ClassDef(self, node):
+            return node
+
+    class FindReturn(ast.NodeVisitor):
+        def __init__(self):
+            self.found = False
+
+        def visit_Return(self, node):
+            self.found = True
+
+        def visit_FunctionDef(self, node):
+            pass
+
+        def visit_AsyncFunctionDef(self, node):
+            pass
+
+        def visit_Lambda(self, node):
+            pass
+
+        def visit_ClassDef(self, node):
+            pass
+
+    class FindBreak(ast.NodeVisitor):
+        def __init__(self):
+            self.found = False
+
+        def visit_Break(self, node):
+            self.found = True
+
+        # breaks of nested loops / functions belong to those
+        def visit_For(self, node):
+            pass
+
+        def visit_While(self, node):
+            pass
+
+        def visit_FunctionDef(self, node):
+            pass
+
+        def visit_Lambda(self, node):
+            pass
+
+    def contains_break(stmts):
+        finder = FindBreak()
+        for stmt in stmts:
+            finder.visit(stmt)
+        return finder.found
+
+    def contains_return(stmts):
+        finder = FindReturn()
+        for stmt in stmts:
+            finder.visit(stmt)
+        return finder.found
+
+    class ReplaceReturn(SkipNestedScopes):
+        def __init__(self, flag, val):
+            super().__init__()
+            self.flag = flag
+            self.val = val
+
+        # returns of inner loops were already rewritten
+        def visit_For(self, node):
+            return node
+
+        def visit_While(self, node):
+            return node
+
+        def visit_Return(self, node):
+            lineno, col_offset = node.lineno, node.col_offset
+            value = node.value if node.value is not None else ast.Constant(value=None, lineno=lineno,
+                                                                            col_offset=col_offset)
+            return [assign(self.val, value, lineno, col_offset),
+                    assign(self.flag, ast.Constant(value=True, lineno=lineno, col_offset=col_offset), lineno,
+                           col_offset),
+                    ast.Break(lineno=lineno, col_offset=col_offset)]
+
+    class RewriteLoops(SkipNestedScopes):
+        def rewrite_loop(self, node):
+            nonlocal counter
+            self.generic_visit(node)  # inner loops first
+            if not contains_return(node.body):
+                return node
+            lineno, col_offset = node.lineno, node.col_offset
+            flag = f"__loop_ret_flag_{counter}"
+            val = f"__loop_ret_val_{counter}"
+            counter += 1
+            # `while True:` without a break can only be left by a return
+            only_left_by_return = isinstance(node, ast.While) and isinstance(node.test, ast.Constant) \
+                                  and node.test.value is True and not contains_break(node.body)
+            replacer = ReplaceReturn(flag, val)
+            node.body = flatten([replacer.visit(stmt) for stmt in node.body])
+            ret = ast.Return(value=name(val, lineno, col_offset), lineno=lineno, col_offset=col_offset)
+            return [assign(flag, ast.Constant(value=False, lineno=lineno, col_offset=col_offset), lineno, col_offset),
+                    assign(val, name("__hipy_undefined__", lineno, col_offset), lineno, col_offset),
+                    node,
+                    ret if only_left_by_return else
+                    ast.If(test=name(flag, lineno, col_offset), body=[ret], orelse=[], lineno=lineno,
+                           col_offset=col_offset)]
+
+        def visit_For(self, node):
+            return self.rewrite_loop(node)
+
+        def visit_While(self, node):
+            return self.rewrite_loop(node)
+
+    rewriter = RewriteLoops()
+    return flatten([rewriter.visit(stmt) for stmt in body])
 
 
 def rewrite_loop_break(body):
@@ -1244,7 +1428,16 @@ def rewrite_loop_break(body):
                                                  col_offset=node.col_offset)],
                                value=ast.Constant(value=True, lineno=node.lineno, col_offset=node.col_offset),
                                lineno=node.lineno, col_offset=node.col_offset),
-                    ast.While(test=node.test, body=[encapsulated], orelse=node.orelse,
+                    # stop the loop once `break` was hit (only skipping the body
+                    # would loop forever, e.g. for `while True`); short-circuit,
+                    # so the original test is not evaluated after a break
+                    ast.While(test=ast.IfExp(test=ast.Name(id=rewriter.variable_name, ctx=ast.Load(),
+                                                           lineno=node.lineno, col_offset=node.col_offset),
+                                             body=node.test,
+                                             orelse=ast.Constant(value=False, lineno=node.lineno,
+                                                                 col_offset=node.col_offset),
+                                             lineno=node.lineno, col_offset=node.col_offset),
+                              body=[encapsulated], orelse=node.orelse,
                               lineno=node.lineno, col_offset=node.col_offset)
                 ]
             else:
@@ -1266,6 +1459,7 @@ def rewrite_loop_if_continue(body):
 
 
 def rewrite_func(body):
+    body = rewrite_loop_return(body)
     body = rewrite_if_return(body)
     body = rewrite_loop_break(body)
     body = rewrite_loop_if_continue(body)

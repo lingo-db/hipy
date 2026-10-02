@@ -5,7 +5,7 @@ import sys
 import hipy
 from hipy import binding,global_const, mocked_modules
 import hipy.config
-from hipy.value import Value, VoidValue, PythonModule, ValueHolder, HLCClassValue, CValue, HLCFunctionValue, \
+from hipy.value import Value, VoidValue, UndefinedValue, PythonModule, ValueHolder, HLCClassValue, CValue, HLCFunctionValue, \
     HLCMethodValue, LambdaValue, Type, TypeValue, RawValue, ConstIterValue, RawModule, HLCGeneratorFunctionValue, \
     GeneratorExpressionValue
 import hipy.ir as ir
@@ -180,6 +180,10 @@ class Context:
                 return VoidValue()
             case _:
                 raise NotImplementedError()
+
+    def undefined(self, _action_id=None):
+        with self.handle_action(_action_id):
+            return self.wrap(UndefinedValue())
 
     def constant(self, val, _action_id=None):
         with self.handle_action(_action_id):

@@ -294,6 +294,50 @@ class VoidValue(Value):
         return "None"
 
 
+class UndefinedValue(Value):
+    """Placeholder for a variable that has no value yet and whose type is only
+    known once it gets assigned (e.g. the return value slot introduced by the
+    return-in-loop rewrite, see compiler.rewrite_loop_return). Merging it with
+    a value of type T (at a loop back-edge or an if/else join) yields T, with
+    an undefined IR value on the side where it was never assigned. It must
+    never be read before being assigned."""
+    __HIPY_MUTABLE__ = False
+
+    def __init__(self):
+        super().__init__(None)
+
+    def __topython__(self):
+        raise RuntimeError("use of an undefined value")
+
+    @staticmethod
+    def __merge__(self, other, self_fn, other_fn, context):
+        if isinstance(other.value, UndefinedValue):
+            return self, other, lambda val: UndefinedValue()
+        other_type = other.value.__hipy_get_type__()
+        undef = self_fn(lambda c: c.wrap(other_type.construct(ir.Undef(c.block, other_type.ir_type()).result, c)))
+        return undef, other, lambda val: other_type.construct(val, context)
+
+    class UndefinedType(Type):
+        def ir_type(self):
+            return ir.void
+
+        def construct(self, value, context):
+            return UndefinedValue()
+
+        def __eq__(self, other):
+            return isinstance(other, UndefinedValue.UndefinedType)
+
+        def __repr__(self):
+            return "UndefinedType()"
+
+    @staticmethod
+    def __hipy_create_type__(*args):
+        return UndefinedValue.UndefinedType()
+
+    def __hipy_get_type__(self):
+        return UndefinedValue.UndefinedType()
+
+
 @hipy.decorators.classdef
 class CValue:
     def __init__(self, cval):
