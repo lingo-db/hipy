@@ -44,4 +44,8 @@ def acos(x):
 @hipy.compiled_function
 def atan2(x, y):
     return intrinsics.call_builtin("scalar.float.atan2",float,  [x, y])
+
+@hipy.compiled_function
+def copysign(x, y):
+    return intrinsics.call_builtin("scalar.float.copysign", float, [float(x), float(y)])
 pi = pymath.pi

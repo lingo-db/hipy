@@ -503,6 +503,14 @@ def to_mlir_stmt(stmt, mapping):
                 case "scalar.float.atan2", [ir.FloatType(), ir.FloatType()]:
                     mapping[r] = db.RuntimeCall(to_mlir_type(r.type), str_attr("ATan2"),
                                                 [mapping[args[0]], mapping[args[1]]]).result
+                case "scalar.float.copysign", [ir.FloatType(), ir.FloatType()]:
+                    # magnitude bits of x, sign bit of y (also for -0.0, inf and nan, like C's copysign)
+                    i64 = mlirtypes.i64()
+                    sign_mask = arith.ConstantOp(i64, -(1 << 63)).result
+                    magnitude_mask = arith.ConstantOp(i64, (1 << 63) - 1).result
+                    magnitude = arith.AndIOp(arith.BitcastOp(i64, mapping[args[0]]).result, magnitude_mask).result
+                    sign = arith.AndIOp(arith.BitcastOp(i64, mapping[args[1]]).result, sign_mask).result
+                    mapping[r] = arith.BitcastOp(to_mlir_type(r.type), arith.OrIOp(magnitude, sign).result).result
                 case "scalar.float.round", [ir.FloatType(), ir.IntType()]:
                     # RoundFloat: (f64, int) -> f64 (half to even, like Python); round(x) returns an int
                     rounded = db.RuntimeCall(mlirtypes.f64(), str_attr("RoundFloat"),
