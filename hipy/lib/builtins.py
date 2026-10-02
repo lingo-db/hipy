@@ -1981,7 +1981,7 @@ def _type_of_constant(cval):
         case builtins.bool():
             return SimpleType(bool, ir.bool)
         case builtins.int():
-            return SimpleType(int, ir.i64)
+            return SimpleType(int, ir.int)
         case builtins.float():
             return SimpleType(float, ir.f64)
         case builtins.str():
@@ -2091,8 +2091,8 @@ class _concrete_dict(dict):
             case ValueHolder(value=CValue(cval=item)):
                 return _context.constant(item in self.value.c_dict)
             case _:
-                _context.perform_call(_context.get_attr(self.as_abstract(_context), "__contains__"),
-                                      [item])
+                return _context.perform_call(_context.get_attr(self.as_abstract(_context), "__contains__"),
+                                             [item])
 
     def __hipy_get_type__(self):
         self.update_types()
