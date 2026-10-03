@@ -6,7 +6,7 @@ from builtins import *
 import builtins
 import hipy
 from hipy.value import CValue, ValueHolder, Value, HLCClassValue, TypeValue, Type, SimpleType, static_object, RawValue, \
-    AnyType, ConstIterValue, HLCFunctionValue
+    AnyType, ConstIterValue, HLCFunctionValue, VoidValue
 import hipy.ir as ir
 import hipy.intrinsics as intrinsics
 
@@ -2344,6 +2344,33 @@ class tuple(Value):
     @hipy.compiled_function
     def __lt__(self, other):
         return self._elementwise_comparison(other, lambda a, b: a < b, lambda a, b: a > b)
+
+    @hipy.compiled_function
+    def _elementwise_eq(self, other, idx=0):
+        if idx == len(self):
+            return True
+        elif self[idx] == other[idx]:
+            return self._elementwise_eq(other, idx + 1)
+        else:
+            return False
+
+    @hipy.raw
+    def __eq__(self, other, _context):
+        # tuples (incl. namedtuples) are equal if they have the same length and equal elements; None is never equal.
+        # Anything else is left to the other operand's __eq__ (e.g. sql.nullable)
+        match other.value:
+            case tuple(_elts=other_elts):
+                if len(other_elts) != len(self.value._elts):
+                    return _context.constant(False)
+                return _context.perform_call(_context.get_attr(self, "_elementwise_eq"), [other])
+            case VoidValue():
+                return _context.constant(False)
+            case _:
+                raise NotImplementedError()
+
+    @hipy.compiled_function
+    def __ne__(self, other):
+        return not (self == other)
 
     @hipy.compiled_function
     def __topython__(self):
