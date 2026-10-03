@@ -126,3 +126,12 @@ def row(*element_types):
     return intrinsics.create_type(tuple, [t for t in element_types])
 
 
+
+
+@hipy.compiled_function
+def rows(*element_types):
+    """Type of a list-valued sql.execute: a list with one tuple per result row
+    (each as for sql.row(...)), in the order of the query (unspecified without
+    ORDER BY), e.g. sql.rows(int, sql.nullable(float)). Strings are not
+    supported yet (a compile error)."""
+    return intrinsics.create_type(list, intrinsics.create_type(tuple, [t for t in element_types]))
