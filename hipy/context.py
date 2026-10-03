@@ -325,6 +325,8 @@ class Context:
                 case _:
                     if inspect.isclass(val) and hasattr(val, "__hipy__"):
                         return self.wrap(HLCClassValue(val))
+                    if self._is_module_level_namedtuple(val):
+                        return self._hipy_namedtuple_class(val)
                     if inspect.ismodule(val):
                         return self.wrap(PythonModule(val))
                     else:
@@ -347,6 +349,27 @@ class Context:
 
                         imported_obj = self.get_attr(imported_module, val_name)
                         return self.wrap(lib.builtins.object(known_object=val, value=imported_obj.get_ir_value(self)))
+    def _is_module_level_namedtuple(self, val):
+        # a class created by collections.namedtuple in the UDF module's code (which runs in CPython)
+        return inspect.isclass(val) and issubclass(val, tuple) and hasattr(val, "_fields") \
+            and val.__module__ == self.base_module
+
+    # CPython namedtuple class -> hipy namedtuple class; one per class, so that all uses have the same type
+    _namedtuple_classes = {}
+
+    def _hipy_namedtuple_class(self, val):
+        if val._field_defaults:
+            raise NotImplementedError(f"namedtuple {val.__name__}: defaults are not supported")
+        if val not in Context._namedtuple_classes:
+            if "hipy.lib.collections" not in sys.modules:
+                raise RuntimeError(f"namedtuple {val.__name__} defined at module level: needs `import hipy.lib.collections`")
+            hipy_namedtuple = sys.modules["hipy.lib.collections"].namedtuple
+            cls = self.perform_call(self.get_by_name(hipy_namedtuple, "namedtuple"),
+                                    [self.constant(val.__name__),
+                                     self.create_list([self.constant(f) for f in val._fields])])
+            Context._namedtuple_classes[val] = cls.value
+        return self.wrap(Context._namedtuple_classes[val])
+
     def unpack(self, val, num, _action_id=None):
         with self.handle_action(_action_id):
             #todo: check if val is iterable
