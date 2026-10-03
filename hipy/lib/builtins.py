@@ -1469,6 +1469,17 @@ class list(Value):
             intrinsics.not_implemented()
 
     @hipy.compiled_function
+    def extend(self, other):
+        if intrinsics.isa(other, list):
+            # snapshot the length: l.extend(l) appends l once
+            n = len(other)
+            for i in range(n):
+                self.append(other[i])
+        else:
+            for item in other:
+                self.append(item)
+
+    @hipy.compiled_function
     def pop(self, i=-1):
         if intrinsics.isa(i, int):
             if i < 0:
@@ -1701,6 +1712,13 @@ class _concrete_list(list):
     @hipy.raw
     def append(self, item):
         self.value = _concrete_list(self.value.items + [item])
+
+    @hipy.raw
+    def extend(self, other, _context):
+        if isinstance(other.value, _concrete_list):
+            self.value = _concrete_list(self.value.items + other.value.items)
+        else:
+            return _context.perform_call(_context.get_attr(self.as_abstract(_context), "extend"), [other])
 
     @hipy.raw
     def __add__(self, other, _context):
