@@ -33,7 +33,10 @@ class _named_tuple(_tuple):
                 n = f"_elt{i}"
                 args.append(context.wrap(
                     t.construct(ir.RecordGet(context.block, t.ir_type(), value, n).result, context)))
-            return self.cls(args, self.typename, self.field_names, value=value)
+            if self.cls is _named_tuple:
+                return self.cls(args, self.typename, self.field_names, value=value)
+            # subclasses (collections.namedtuple, urllib's ParseResult, ...) know their name and fields
+            return self.cls(args, value=value)
 
         def __eq__(self, other):
             if isinstance(other, _named_tuple.NamedTupleType):
