@@ -1469,6 +1469,16 @@ class list(Value):
             intrinsics.not_implemented()
 
     @hipy.compiled_function
+    def pop(self, i=-1):
+        if intrinsics.isa(i, int):
+            if i < 0:
+                i = i + len(self)
+            # runtime error if the list is empty or i is out of range
+            return intrinsics.call_builtin("list.pop", self._element_type, [self, i])
+        else:
+            intrinsics.not_implemented()
+
+    @hipy.compiled_function
     def sort(self):
         compare_fn = intrinsics.bind(lambda l, r: l < r, [self._element_type, self._element_type])
         intrinsics.call_builtin("list.sort", None, [self, compare_fn])

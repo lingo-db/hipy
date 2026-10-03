@@ -424,6 +424,8 @@ class CPPBackend:
                 return f"{self.generate_result(op.result)} = {self.generate_value(op.args[0])}->size();"
             case "list.at":
                 return f"{self.generate_result(op.result)} = (*{self.generate_value(op.args[0])})[{self.generate_value(op.args[1])}];"
+            case "list.pop":
+                return f"{self.generate_result(op.result)} = {self.generate_value(op.args[0])}->at({self.generate_value(op.args[1])}); {self.generate_value(op.args[0])}->erase({self.generate_value(op.args[0])}->begin() + {self.generate_value(op.args[1])});"
             case "list.set":
                 return f"(*{self.generate_value(op.args[0])})[{self.generate_value(op.args[1])}] = {self.generate_value(op.args[2])};"
             case "list.sort":

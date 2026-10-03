@@ -329,6 +329,14 @@ def to_mlir_stmt(stmt, mapping):
                 case "list.at", [ir.ListType(), ir.IntType()]:
                     as_index = arith.IndexCastOp(mlirtypes.index(), mapping[args[1]]).result
                     mapping[r] = db.ListGetOp(to_mlir_type(r.type), mapping[args[0]], as_index).result
+                case "list.pop", [ir.ListType(), ir.IntType()]:
+                    as_index = arith.IndexCastOp(mlirtypes.index(), mapping[args[1]]).result
+                    if hasattr(db, "ListPopOp"):
+                        mapping[r] = db.ListPopOp(to_mlir_type(r.type), mapping[args[0]], as_index).result
+                    else:
+                        # lingodb_bridge wheels built before db.list_pop: create it by name
+                        mapping[r] = mlir.Operation.create("db.list_pop", results=[to_mlir_type(r.type)],
+                                                           operands=[mapping[args[0]], as_index]).result
                 case "list.append", [ir.ListType(), elem_type]:
                     db.ListAppendOp(mapping[args[0]], mapping[args[1]])
                 case "list.length", [ir.ListType()]:
