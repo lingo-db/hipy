@@ -235,7 +235,18 @@ class bool(Value):
 
     @hipy.compiled_function
     def __str__(self):
-        return intrinsics.call_builtin("scalar.bool.to_string", str, [self])
+        return "True" if self else "False"
+
+    @hipy.compiled_function
+    def __hipy__repr__(self):
+        return str(self)
+
+    @hipy.compiled_function
+    def __format__(self, format_spec):
+        if format_spec == "":
+            return str(self)
+        else:
+            intrinsics.not_implemented()
 
     @hipy.compiled_function
     def __and__(self, other):
