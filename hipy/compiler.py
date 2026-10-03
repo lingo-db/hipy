@@ -1477,6 +1477,17 @@ def stage_function(func, globals, nested=False, outer_context=None):
             body = rewrite_func(body)
             res_body = []
             current_functions = (outer_context.current_functions | {name}) if outer_context is not None else {name}
+            # a parameter or a name assigned anywhere in the body is a local variable in the whole body (Python's
+            # scoping rule), also if it is named like the function itself (or an enclosing function)
+            analyzer = VariableAnalyzer()
+            for stmt in body:
+                analyzer.visit(stmt)
+            local_names = analyzer.written_variables | {arg.arg for arg in args.args + args.kwonlyargs}
+            if args.vararg is not None:
+                local_names.add(args.vararg.arg)
+            if args.kwarg is not None:
+                local_names.add(args.kwarg.arg)
+            current_functions = current_functions - local_names
             context = StageContext(res_body, globals, nested, current_functions)
             if outer_context and nested:
                 context.available_variables = copy.deepcopy(outer_context.available_variables)
