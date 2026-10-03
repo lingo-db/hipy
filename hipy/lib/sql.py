@@ -53,6 +53,25 @@ class Nullable(Value):
         # `x is None` / `x is not None`
         return self.is_null()
 
+    @hipy.raw
+    def __eq__(self, other, _context):
+        # Python semantics: None equals only None, a value is compared with the other operand
+        from hipy.value import VoidValue
+        if isinstance(other.value, VoidValue):
+            return _context.perform_call(_context.get_attr(self, "is_null"))
+        return _context.perform_call(_context.get_attr(self, "_eq_value"), [other])
+
+    @hipy.compiled_function
+    def _eq_value(self, other):
+        if self.is_null():
+            return other is None
+        else:
+            return self.get_value() == other
+
+    @hipy.compiled_function
+    def __ne__(self, other):
+        return not (self == other)
+
     @hipy.compiled_function
     def get_value(self):
         return intrinsics.call_builtin("nullable.get_value", self.element_type, [self])

@@ -257,12 +257,23 @@ class VoidValue(Value):
         return _context.wrap(_context.call_builtin("python.get_none", pyobject.__hipy_create_type__(), []))
 
     @staticmethod
+    def _nullable_element_type(t):
+        # scalars (int, float, str, bool) and (named) tuples of them can be wrapped in sql.nullable
+        from hipy.lib.builtins import tuple as _tuple
+        from hipy.internal_values import _named_tuple
+        if isinstance(t, (_tuple.TupleType, _named_tuple.NamedTupleType)):
+            return all(VoidValue._nullable_element_type(e) for e in t.element_types)
+        return isinstance(t, SimpleType) and isinstance(t.ir_type(), (ir.IntType, ir.FloatType, ir.StringType,
+                                                                     ir.BoolType))
+
+    @staticmethod
     def __merge__(self, other, self_fn, other_fn, context):
         if isinstance(other.value, VoidValue):
             # todo: optimization potential
             return self, other, lambda val: VoidValue(val)
-        # None and a scalar (e.g. `return None` in one branch, `return 1` in
-        # the other) -> sql.nullable(T); a nullable merges itself
+        # None and a scalar or a (named) tuple of scalars (e.g. `return None`
+        # in one branch, `return 1` in the other) -> sql.nullable(T); a
+        # nullable merges itself
         # (Nullable.__merge__)
         from hipy.lib.sql import Nullable
         if isinstance(other.value, Nullable):
@@ -271,8 +282,7 @@ class VoidValue(Value):
             other_type = other.value.__hipy_get_type__()
         except (NotImplementedError, AttributeError):
             raise NotImplementedError()
-        if not isinstance(other_type, SimpleType) or not isinstance(other_type.ir_type(), (
-                ir.IntType, ir.FloatType, ir.StringType, ir.BoolType)):
+        if not VoidValue._nullable_element_type(other_type):
             raise NotImplementedError()
         nullable_type = Nullable.NullableType(other_type)
         null = self_fn(lambda c: c.wrap(c.call_builtin("nullable.null", nullable_type, [])))
